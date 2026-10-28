@@ -14,6 +14,18 @@ local Config = {
 }
 ```
 
+Or launch the hosted loader directly with those same five controls:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/refs/heads/main/loader.luau"))({
+    MinViciousLevel = 1,
+    MaxViciousLevel = 12,
+    DontHop = false,
+    MainAccount = "YourMainUsername",
+    Group = "YourSharedRoom",
+})
+```
+
 - Vicious levels are inclusive integers from 1 to 12; minimum cannot exceed maximum.
 - `DontHop = true` sets the original script's no-hop setting. Its separate error/rejoin recovery still exists.
 - `MainAccount` is the Roblox **username**, not display name. Matching is case-insensitive. The matching account is main; other accounts using the same group are alts.

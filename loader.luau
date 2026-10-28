@@ -1,5 +1,5 @@
 -- Use the same MainAccount and Group on your main account and all alts.
-local Config = {
+local Config = ... or {
     MinViciousLevel = 1,
     MaxViciousLevel = 12,
     DontHop = false,
