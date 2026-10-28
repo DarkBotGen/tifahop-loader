@@ -80,6 +80,112 @@ local function rebrandString(value)
   return value
 end
 
+-- Ground navigation used only for the approach to a Vicious Bee.
+-- Combat positioning and the original movement routines remain separate.
+local function walkToVicious(target, isRunning, setStatus)
+  local character = player.Character
+  local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+  local root = character and character:FindFirstChild("HumanoidRootPart")
+  local monsterRoot = target and target:FindFirstChild("HumanoidRootPart")
+  local monsterHumanoid = target and target:FindFirstChildOfClass("Humanoid")
+  if not humanoid or not root or not monsterRoot then return false end
+  local function active()
+    return isRunning() and player.Character == character and character.Parent ~= nil
+      and root.Parent ~= nil and humanoid.Health > 0
+      and target.Parent ~= nil and monsterRoot.Parent ~= nil
+      and (not monsterHumanoid or monsterHumanoid.Health > 0)
+  end
+  local function nearTarget()
+    return (root.Position - monsterRoot.Position).Magnitude <= 12
+  end
+  local function stop()
+    if root.Parent and humanoid.Health > 0 then humanoid:MoveTo(root.Position) end
+  end
+  local function finish(connection)
+    if connection then connection:Disconnect() end
+    stop()
+    return false
+  end
+  if not active() then return false end
+  if nearTarget() then return true end
+  setStatus("Walking to Vicious Bee")
+  local pathfinding = game:GetService("PathfindingService")
+  local heartbeat = game:GetService("RunService").Heartbeat
+  local rayParams = RaycastParams.new()
+  rayParams.FilterType = Enum.RaycastFilterType.Exclude
+  rayParams.FilterDescendantsInstances = {character, target}
+  local deadline = os.clock() + 90
+  local failures = 0
+
+  while active() and os.clock() < deadline and failures < 5 do
+    if nearTarget() then stop(); return true end
+    local plannedTarget = monsterRoot.Position
+    local hit = workspace:Raycast(plannedTarget + Vector3.new(0,4,0), Vector3.new(0,-40,0), rayParams)
+    local destination = hit and hit.Position + Vector3.new(0,3,0) or plannedTarget
+    local path = pathfinding:CreatePath({
+      AgentRadius=2, AgentHeight=5, AgentCanJump=true,
+      AgentCanClimb=true, WaypointSpacing=4,
+    })
+    local ok = pcall(function() path:ComputeAsync(root.Position,destination) end)
+    if not active() then stop(); return false end
+    if not ok or path.Status ~= Enum.PathStatus.Success then
+      failures += 1
+      task.wait(0.4)
+    else
+      local blocked, currentIndex = false, 1
+      local blockedConnection = path.Blocked:Connect(function(index)
+        if index >= currentIndex then blocked = true end
+      end)
+      local repath, movedTarget = false, false
+      for index,waypoint in ipairs(path:GetWaypoints()) do
+        currentIndex = index
+        if not active() then return finish(blockedConnection) end
+        if nearTarget() then blockedConnection:Disconnect(); stop(); return true end
+        if blocked then repath=true; break end
+        if (waypoint.Position-root.Position).Magnitude > 3 then
+          if waypoint.Action == Enum.PathWaypointAction.Jump then humanoid.Jump=true end
+          local ended, reached = false, false
+          local moveConnection = humanoid.MoveToFinished:Connect(function(didReach)
+            ended, reached = true, didReach
+          end)
+          local started = os.clock()
+          local bestDistance = (waypoint.Position-root.Position).Magnitude
+          local lastProgress = started
+          local timeout = math.clamp(bestDistance / math.max(humanoid.WalkSpeed,1)*2+2,3,10)
+          humanoid:MoveTo(waypoint.Position)
+          while active() and not ended and not blocked and os.clock() < deadline do
+            local distance = (waypoint.Position-root.Position).Magnitude
+            if distance <= 3 then reached=true; break end
+            if nearTarget() then reached=true; break end
+            if (monsterRoot.Position-plannedTarget).Magnitude > 8 then
+              movedTarget=true; break
+            end
+            local now = os.clock()
+            if distance < bestDistance-0.5 then bestDistance=distance; lastProgress=now end
+            if now-started > timeout or now-lastProgress > 3 then break end
+            heartbeat:Wait()
+          end
+          moveConnection:Disconnect()
+          if not active() then return finish(blockedConnection) end
+          if blocked or movedTarget or not reached then repath=true; break end
+        end
+      end
+      blockedConnection:Disconnect()
+      if nearTarget() then stop(); return true end
+      -- A moving target needs a fresh route; fixed obstructions consume retries.
+      if not movedTarget then failures += 1 end
+      if repath then setStatus("Replanning path to Vicious Bee") end
+      task.wait(0.1)
+    end
+  end
+  stop()
+  if active() then
+    setStatus("Cannot reach Vicious Bee by walking")
+    warn("[TifaHop] No walkable route to Vicious Bee; flying fallback is disabled")
+  end
+  return false
+end
+
 
 -- initialize_automation | original ID: main_0 | 6551 instructions, 340 blocks
 Functions.initialize_automation = function(U, ...)
@@ -37759,7 +37865,7 @@ Functions.main_0_126 = function(U, ...)
                   R[7] = rebrandString(R[7] .. R[8])
                   R[8] = " vic"
                   R[7] = rebrandString(R[7] .. R[8])
-                  do local result=pack(R[6](unpack(R,7,7))); for i=1,0 do R[6+i-1]=result[i] end end
+                  U[4][1]("Walking to Vicious Bee")
                   R[6] = 1
                   R[7] = 6
                   R[8] = 1
@@ -38695,7 +38801,7 @@ Functions.main_0_126 = function(U, ...)
                   R[15] = "Position"
                   R[13] = R[14][R[15]]
                   do local result=pack(R[12](unpack(R,13,13))); for i=1,result.n do R[12+i-1]=result[i] end; top=12+result.n end
-                  do local result=pack(R[11](unpack(R,12,top-1))); for i=1,0 do R[11+i-1]=result[i] end end
+                  if not walkToVicious(R[0], function() return U[6][1](R[1]) end, U[4][1]) then error("return",0) end -- approach only; no flying fallback
                   R[12] = U[8][1]
                   R[13] = "Character"
                   R[11] = R[12][R[13]]
