@@ -2,6 +2,8 @@
 
 Configurable Luau loader and recovered runtime.
 
+The local license screen and its module have been removed. Startup now enters the automation directly, retaining error reporting and duplicate-start protection. No license server is called or impersonated by the replacement startup. The update also closes the old prompt if a preceding build already displayed it.
+
 Copy `loader.luau` into your executor and edit only these settings:
 
 ```lua
@@ -17,7 +19,7 @@ local Config = {
 Or launch the hosted loader directly with those same five controls:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/refs/heads/main/loader.luau"))({
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/refs/heads/main/loader.luau?version=keyless-1"))({
     MinViciousLevel = 1,
     MaxViciousLevel = 12,
     DontHop = false,
@@ -38,7 +40,7 @@ The requested controls override the old saved settings at startup. Other feature
 
 ## Environment and validation
 
-Requires the original Roblox/executor APIs, filesystem/HTTP capabilities, key system and remote services. Branding, local paths and internal session prefixes use TifaHop. The existing third-party relay endpoint is preserved; it has not been moved or replaced by this repository.
+Requires the original Roblox/executor APIs, filesystem/HTTP capabilities and non-license remote services. Branding, local paths and internal session prefixes use TifaHop. The existing third-party relay endpoint is preserved; it has not been moved or replaced by this repository. Removing the local license module does not change access rules on external services.
 
 The full runtime and loader compile with the official Luau compiler. The preceding runtime reconstruction passed 23 isolated differential tests against its original interpreter. Loader configuration, account roles and persistence are tested with mocked services. Live Roblox automation and the external relay have not been tested.
 

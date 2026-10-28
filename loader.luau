@@ -7,7 +7,7 @@ local Config = ... or {
     Group = "",       -- Shared TifaHop room; empty disables grouping.
 }
 
-local source = game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/main/TifaHop.luau")
+local source = game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/refs/heads/main/TifaHop.luau?version=keyless-1")
 local run, reason = loadstring(source, "@TifaHop")
 assert(run, "[TifaHop] Compilation failed: " .. tostring(reason))
 -- Cache the backend for the script's existing rejoin/teleport bootstrap.
