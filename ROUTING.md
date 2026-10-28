@@ -1,15 +1,11 @@
-# Walking route implementation
+# Routing and normal interactions
 
-Reference: `atlasbss (1).lua`, supplied by the user. Only its static route coordinates and standard walking/jumping links were extracted; the reference script was not executed.
+The user supplied atlasbss (1).lua as a reference. Only literal route coordinates, walking links and Red Cannon timing profiles were extracted; that script was not executed. Baseline map travel uses A* with a binary heap, visible connectors and bounded retries that exclude stalled edges. Optional cannon shortcuts use a time-based cost. Other cannon, portal, reset and specialized interaction edges are omitted.
 
-The reference's relevant sections are its map-graph planner near line 6694, route follower near line 7023, path links near line 7689, node coordinates near line 36596 and Vicious routine near line 58277. Its Vicious routine locates the containing flower field and calls field travel before moving near the target. The root position is used with a downward offset when selecting ground combat positions.
+The recovered general walking branch immediately aborted; it has been replaced with the map router. The former flying movement function is replaced too, so legacy callers cannot teleport or fly when a stale UI value says Tween. Scripted speed overrides, fast token tweens, direct interaction remotes and the old Vicious platform routine are omitted or replaced.
 
-The preceding TifaHop version instead sent Roblox's generic pathfinder toward the boss and compared full 3D distance with its elevated root. In addition, the original general walking callback (`main_0_38`) immediately raised the internal return sentinel, so the global Walk selector had no usable route implementation.
+Hive claiming uses an empty hive's patharrow.Base position, forces a walking-only route, and checks actual proximity and the visible Claim Hive prompt before sending E. It confirms ownership and spawn readiness before starting either grind mode. No direct ClaimHive call remains.
 
-The replacement uses a custom binary-heap A* planner on 3,439 route nodes and 22,048 directed links. Candidate endpoints must have an unobstructed connector through Map/Gates geometry. The follower refreshes Humanoid MoveTo, triggers jumps for labelled transitions, measures horizontal progress with a vertical arrival bound, and excludes stalled links for subsequent attempts. It stops after four route attempts or its time budget. No health reset, noclip, teleport, cannon or portal action is introduced by the router.
+Vicious approach resolves the containing field, travels to that field and then walks below the elevated bee. Combat circles on the ground with MoveTo and the normal token collector. Red Cannon interaction requires the physical platform and a matching on-screen prompt, with no remote activation from a distant location. Fireflies use the same field travel and normal collection helpers.
 
-Special interaction links are excluded from the baseline graph. Red Cannon routes are optionally added separately using four entry nodes, 21 reference timing profiles and estimated travel-time costs. Blue/Yellow cannons, portals and reset links remain excluded. Optional jump shortcuts are not merged; required jump links already present in the baseline graph are retained. Specialized areas reachable only through excluded interactions may have no walking route.
-
-Vicious movement routes to the target field and then to a grounded position beneath the current boss position. The containing field is checked again if the boss moves. Existing combat and its platform remain intact after arrival.
-
-The map data comes from the supplied reference version. Live geometry, streaming, collision changes and character jump capability can still affect traversal; mocked tests cannot verify those in-game conditions.
+The static map reflects the supplied reference version. Geometry changes, streaming, collision and character jump capability still affect real traversal. Mocked tests cannot reproduce the live game.
