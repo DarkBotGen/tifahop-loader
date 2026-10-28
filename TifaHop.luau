@@ -45,9 +45,7 @@ if viciousMovement=="Tween" then
   warn("[TifaHop] Tween movement is disabled; using normal walking")
   viciousMovement="Walk"
 end
-local farmMode=options.Mode
-if farmMode==nil then farmMode="Vicious" end
-assert(farmMode=="Vicious" or farmMode=="Fireflies", "Mode must be Vicious or Fireflies")
+-- Legacy Mode values are ignored; farming selection belongs to the GUI.
 local useRedCannon=options.UseRedCannon
 if useRedCannon==nil then useRedCannon=true end
 assert(type(useRedCannon)=="boolean", "UseRedCannon must be true or false")
@@ -63,11 +61,11 @@ assert(type(mainAccount)=="string", "MainAccount must be a Roblox username, or a
 assert(type(group)=="string", "Group must be a shared room name, or an empty string")
 mainAccount = mainAccount:match("^%s*(.-)%s*$")
 group = group:match("^%s*(.-)%s*$")
-local grouped = group ~= "" and farmMode=="Vicious"
+local grouped = group ~= ""
 assert(not grouped or mainAccount ~= "", "Set MainAccount when using a Group")
 local isMain = grouped and player.Name:lower() == mainAccount:lower()
 local UserConfig = {
-  mode="vichop", minlvl=minLevel, maxlvl=maxLevel, donthop=dontHop, movement=viciousMovement,
+  minlvl=minLevel, maxlvl=maxLevel, donthop=dontHop, movement=viciousMovement,
   room=grouped and group or "", main=isMain, alt=grouped and not isMain, cannon=useRedCannon,
   walkspeedon=speedEnabled, walkspeed=walkingSpeed, walkdynamic=false, fastrare=false, usesprinkler=false, planters=false,
 }
@@ -75,7 +73,7 @@ shared.TifaHop = {
   MinViciousLevel=minLevel, MaxViciousLevel=maxLevel, DontHop=dontHop,
   MainAccount=mainAccount, Group=group,
   ViciousMovement=viciousMovement,
-  Mode=farmMode, UseRedCannon=useRedCannon, WalkSpeedEnabled=speedEnabled, WalkSpeed=walkingSpeed,
+  UseRedCannon=useRedCannon, WalkSpeedEnabled=speedEnabled, WalkSpeed=walkingSpeed,
 }
 -- Original native overrides are applied after saved settings. Supplying these
 -- makes the loader settings authoritative during startup without polling.
@@ -42179,7 +42177,7 @@ Functions.main_0_128 = function(U, ...)
   local vn=math.max(0,argv.n-1)
   for i=1,vn do V[i]=argv[1+i] end
   local top=0
-  if farmMode=="Fireflies" then return runFireflyGrind(function() return U[5][1](argv[1]) end,U[1][1],U[10][1],U[6][1]) end
+  -- Farming is selected by the GUI dispatcher.
   local pc = 1
   while true do
     if pc < 1 or pc > 478 then error("Invalid instruction address in main_0_128", 0) end
@@ -59680,6 +59678,7 @@ Functions.main_0_169 = function(U, ...)
                 R[2] = U[20][1]
                 do local result=pack(R[2](unpack(R,3,2))); for i=1,1 do R[2+i-1]=result[i] end end
                 R[2] = {R[2]}
+                if R[2][1]=="fireflies" then local token=R[0]; task.spawn(function() local ok,reason=pcall(function() runFireflyGrind(function() return U[11][1](token) end,U[28][1],U[12][1],U[2][1]) end); U[2][1].busy=false; U[2][1].farming=false; if not ok and tostring(reason)~="return" then warn("[TifaHop] Fireflies: "..tostring(reason)) end end); U[28][1]("Started: Fireflies"); return end -- dedicated worker, no Vicious or group feed
                 R[3] = U[2][1]
                 R[4] = "em"
                 R[5] = R[2][1]
@@ -65641,6 +65640,7 @@ Functions.main_0_183 = function(U, ...)
                 R[57] = R[53]
                 do local result=pack(R[56](unpack(R,57,57))); for i=1,1 do R[56+i-1]=result[i] end end
                 R[54][R[55]] = R[56]
+                R[54].fireflies=R[7][1](R[53]) -- Fireflies statistics page
                 R[55] = {}
                 R[54] = {R[54]}
                 R[55] = {R[55]}
@@ -66005,6 +66005,7 @@ Functions.main_0_183 = function(U, ...)
                 R[66][R[67]] = R[75]
                 R[68][R[69]] = R[76]
                 R[70][R[71]] = R[77]
+                R[55][1].fireflies=R[7][1](R[59]); R[10](R[54][1].fireflies,"Firefly hop",function() return "Night servers" end); R[10](R[55][1].fireflies,"Farm stationary fireflies",function() return "Use Start above" end)
                 R[60] = R[12]
                 R[62] = R[55][1]
                 R[63] = "vichop"
@@ -66450,7 +66451,7 @@ Functions.main_0_183 = function(U, ...)
                   R[54] = 6
                   R[53] = -R[54]
                   do local result=pack(R[49](unpack(R,50,53))); for i=1,1 do R[49+i-1]=result[i] end end
-                  R[47][R[48]] = R[49]
+                  R[47][R[48]] = R[49]; R[47].Position=env.UDim2.new(((R[42]-1)%4)/4,3,math.floor((R[42]-1)/4)*0.5,3); R[47].Size=env.UDim2.new(0.25,-6,0.5,-6)
                   R[48] = "Text"
                   R[50] = R[44][1]
                   R[51] = 2
@@ -66830,6 +66831,7 @@ Functions.main_0_183 = function(U, ...)
                 R[38][R[39]] = R[40]
                 R[39] = R[23][1]
                 do local result=pack(R[36](unpack(R,37,39))); for i=1,1 do R[36+i-1]=result[i] end end
+                R[36].Size=env.UDim2.new(1,0,0,68) -- two rows keep all farm tabs readable
                 R[37] = R[5][1]
                 R[38] = R[36]
                 R[39] = 8
@@ -66862,6 +66864,7 @@ Functions.main_0_183 = function(U, ...)
                 R[46] = "Plant"
                 for i=1,2 do R[44][0+i]=R[44+i] end
                 for i=1,6 do R[38][0+i]=R[38+i] end
+                table.insert(R[38],3,{"fireflies","Fireflies"}) -- genuine GUI farm selection
                 R[39] = env["ipairs"]
                 R[40] = R[38]
                 do local result=pack(R[39](unpack(R,40,40))); for i=1,3 do R[39+i-1]=result[i] end end
@@ -73111,7 +73114,7 @@ Functions.main_0_183_27 = function(U, ...)
   local vn=math.max(0,argv.n-1)
   for i=1,vn do V[i]=argv[1+i] end
   local top=0
-  if farmMode=="Fireflies" and argv[1]=="vichop" then return "Fireflies" end
+  if argv[1]=="fireflies" then return "Fireflies" end
   local pc = 1
   while true do
     if pc < 1 or pc > 55 then error("Invalid instruction address in main_0_183_27", 0) end
@@ -75571,6 +75574,7 @@ Functions.main_0_183_51 = function(U, ...)
   local vn=math.max(0,argv.n-0)
   for i=1,vn do V[i]=argv[0+i] end
   local top=0
+  if U[1][1].mode=="fireflies" then return "Fireflies" end
   local pc = 1
   while true do
     if pc < 1 or pc > 40 then error("Invalid instruction address in main_0_183_51", 0) end
@@ -79727,7 +79731,7 @@ Functions.main_0_183_124 = function(U, ...)
                 R[1] = "Visible"
                 R[3] = U[2][1]
                 R[4] = "vichop"
-                R[2] = R[3] == R[4]
+                R[2] = R[3] == R[4] or R[3] == "fireflies" -- shared Start/status card
                 if (not not R[2]) == true then pc = 216 end
               else
                 -- block L204

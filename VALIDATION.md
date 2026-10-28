@@ -13,3 +13,5 @@
 Tests use mocked game services. They do not establish successful live traversal/combat, availability of external services, game approval of automation or protection against bans.
 
 - Speed tests verify toggle/value persistence, reload, application, disable restoration, respawn and invalid values. Dodge tests verify warning disks, spikes, clear-route filtering, blocked exits and invisible-marker filtering.
+
+- GUI integration checks cover Fireflies page/tab registration, shared Start/status visibility, native stop/save/selection callbacks and a dedicated worker using the run cancellation token. UI layout and gameplay have not been verified in Roblox.
