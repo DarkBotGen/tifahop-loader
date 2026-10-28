@@ -11,18 +11,20 @@ local Config = {
     MinViciousLevel = 1,
     MaxViciousLevel = 12,
     DontHop = false,
+    ViciousMovement = "Walk", -- "Walk" or "Tween"
     MainAccount = "YourMainUsername",
     Group = "YourSharedRoom",
 }
 ```
 
-Or launch the hosted loader directly with those same five controls:
+Or launch the hosted loader directly with those same controls:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/walk-v1/loader.luau"))({
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/movement-v1/loader.luau"))({
     MinViciousLevel = 1,
     MaxViciousLevel = 12,
     DontHop = false,
+    ViciousMovement = "Walk", -- "Walk" or "Tween"
     MainAccount = "YourMainUsername",
     Group = "YourSharedRoom",
 })
@@ -30,6 +32,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-lo
 
 - Vicious levels are inclusive integers from 1 to 12; minimum cannot exceed maximum.
 - `DontHop = true` sets the original script's no-hop setting. Its separate error/rejoin recovery still exists.
+- `ViciousMovement` selects `"Walk"` (pathfinding) or `"Tween"` (original flying movement) for the approach to Vicious Bees. Default is `"Walk"`. The selection is saved for rejoin recovery. Change the loader value and rejoin to switch an already running session.
 - `MainAccount` is the Roblox **username**, not display name. Matching is case-insensitive. The matching account is main; other accounts using the same group are alts.
 - Use the same `MainAccount` and `Group` on every participating account. A nonempty group requires a main username.
 - Empty `Group` disables grouped roles. Group is this script's shared coordination room, not a Roblox group ID. Room names are not authenticated access controls.
@@ -40,7 +43,7 @@ The requested controls override the old saved settings at startup. Other feature
 
 ## Walking to Vicious Bees
 
-The `walk-v1` build approaches Vicious Bees on foot using PathfindingService waypoints and Humanoid walking. It follows jump waypoints and recomputes the path when blocked, stalled, or when the target moves. Stop/cancellation, character death and disappearing targets interrupt navigation, and event connections are cleaned up.
+With `ViciousMovement = "Walk"`, the `movement-v1` build approaches Vicious Bees on foot using PathfindingService waypoints and Humanoid walking. It follows jump waypoints and recomputes the path when blocked, stalled, or when the target moves. Stop/cancellation, character death and disappearing targets interrupt navigation, and event connections are cleaned up. `ViciousMovement = "Tween"` restores the original approach callback.
 
 Unreachable targets produce a status message and abort the approach; navigation does not fall back to flying. Total navigation time and failed route attempts are bounded. Combat positioning, including the existing fighting platform, stays as before after arrival. The general movement selector still applies to other features; this override applies specifically to the Vicious approach.
 

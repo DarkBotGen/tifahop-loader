@@ -24,7 +24,7 @@ if options == nil and readfile and isfile and isfile(configPath) then
 end
 if options == nil then options = {} end
 assert(type(options) == "table", "TifaHop configuration must be a table")
-local allowed = {MinViciousLevel=true, MaxViciousLevel=true, DontHop=true, MainAccount=true, Group=true}
+local allowed = {MinViciousLevel=true, MaxViciousLevel=true, DontHop=true, MainAccount=true, Group=true, ViciousMovement=true}
 for key in pairs(options) do assert(allowed[key], "Unknown TifaHop setting: " .. tostring(key)) end
 local function level(key, fallback)
   local value = options[key]
@@ -38,6 +38,9 @@ assert(minLevel <= maxLevel, "MinViciousLevel must not exceed MaxViciousLevel")
 local dontHop = options.DontHop
 if dontHop == nil then dontHop = false end
 assert(type(dontHop)=="boolean", "DontHop must be true or false")
+local viciousMovement = options.ViciousMovement
+if viciousMovement == nil then viciousMovement = "Walk" end
+assert(viciousMovement=="Walk" or viciousMovement=="Tween", "ViciousMovement must be Walk or Tween")
 local mainAccount = options.MainAccount or ""
 local group = options.Group or ""
 assert(type(mainAccount)=="string", "MainAccount must be a Roblox username, or an empty string")
@@ -54,6 +57,7 @@ local UserConfig = {
 shared.TifaHop = {
   MinViciousLevel=minLevel, MaxViciousLevel=maxLevel, DontHop=dontHop,
   MainAccount=mainAccount, Group=group,
+  ViciousMovement=viciousMovement,
 }
 -- Original native overrides are applied after saved settings. Supplying these
 -- makes the loader settings authoritative during startup without polling.
@@ -37865,7 +37869,7 @@ Functions.main_0_126 = function(U, ...)
                   R[7] = rebrandString(R[7] .. R[8])
                   R[8] = " vic"
                   R[7] = rebrandString(R[7] .. R[8])
-                  U[4][1]("Walking to Vicious Bee")
+                  U[4][1](viciousMovement == "Walk" and "Walking to Vicious Bee" or "Flying to Vicious Bee")
                   R[6] = 1
                   R[7] = 6
                   R[8] = 1
@@ -38801,7 +38805,7 @@ Functions.main_0_126 = function(U, ...)
                   R[15] = "Position"
                   R[13] = R[14][R[15]]
                   do local result=pack(R[12](unpack(R,13,13))); for i=1,result.n do R[12+i-1]=result[i] end; top=12+result.n end
-                  if not walkToVicious(R[0], function() return U[6][1](R[1]) end, U[4][1]) then error("return",0) end -- approach only; no flying fallback
+                  if viciousMovement == "Walk" then if not walkToVicious(R[0], function() return U[6][1](R[1]) end, U[4][1]) then error("return",0) end else do local result=pack(R[11](unpack(R,12,top-1))); for i=1,0 do R[11+i-1]=result[i] end end end -- chosen approach only; combat remains unchanged
                   R[12] = U[8][1]
                   R[13] = "Character"
                   R[11] = R[12][R[13]]
