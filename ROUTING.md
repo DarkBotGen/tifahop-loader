@@ -8,7 +8,7 @@ The preceding TifaHop version instead sent Roblox's generic pathfinder toward th
 
 The replacement uses a custom binary-heap A* planner on 3,439 route nodes and 22,048 directed links. Candidate endpoints must have an unobstructed connector through Map/Gates geometry. The follower refreshes Humanoid MoveTo, triggers jumps for labelled transitions, measures horizontal progress with a vertical arrival bound, and excludes stalled links for subsequent attempts. It stops after four route attempts or its time budget. No health reset, noclip, teleport, cannon or portal action is introduced by the router.
 
-Special interaction links are excluded. Optional jump shortcuts are not merged; required jump links already present in the baseline route graph are retained. Consequently, specialized areas reachable only through excluded interactions may have no walking route.
+Special interaction links are excluded from the baseline graph. Red Cannon routes are optionally added separately using four entry nodes, 21 reference timing profiles and estimated travel-time costs. Blue/Yellow cannons, portals and reset links remain excluded. Optional jump shortcuts are not merged; required jump links already present in the baseline graph are retained. Specialized areas reachable only through excluded interactions may have no walking route.
 
 Vicious movement routes to the target field and then to a grounded position beneath the current boss position. The containing field is checked again if the boss moves. Existing combat and its platform remain intact after arrival.
 

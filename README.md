@@ -8,10 +8,12 @@ Copy `loader.luau` into your executor and edit only these settings:
 
 ```lua
 local Config = {
+    Mode = "Vicious", -- "Vicious" or "Fireflies"
     MinViciousLevel = 1,
     MaxViciousLevel = 12,
     DontHop = false,
     ViciousMovement = "Walk", -- "Walk" or "Tween"
+    UseRedCannon = true,
     MainAccount = "YourMainUsername",
     Group = "YourSharedRoom",
 }
@@ -20,26 +22,47 @@ local Config = {
 Or launch the hosted loader directly with those same controls:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/routes-v1/loader.luau"))({
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/grind-v1/loader.luau"))({
+    Mode = "Fireflies", -- "Fireflies" or "Vicious"
     MinViciousLevel = 1,
     MaxViciousLevel = 12,
     DontHop = false,
     ViciousMovement = "Walk", -- "Walk" or "Tween"
+    UseRedCannon = true,
     MainAccount = "YourMainUsername",
     Group = "YourSharedRoom",
 })
 ```
 
 - Vicious levels are inclusive integers from 1 to 12; minimum cannot exceed maximum.
+- `Mode = "Fireflies"` enables night-time firefly farming and hopping; `"Vicious"` preserves Vicious farming. Press the existing Start control after loading. The selected mode is saved for rejoin recovery.
+- `UseRedCannon = true` enables costed Red Cannon shortcuts in walking routes. The account must be able to activate the genuine cannon prompt; unavailable or missed launches fall back to walking routes. Other cannons and portals are not enabled.
 - `DontHop = true` sets the original script's no-hop setting. Its separate error/rejoin recovery still exists.
 - `ViciousMovement` selects `"Walk"` (map routes) or `"Tween"` (original flying movement). It also sets the initial general movement selector, so field travel uses the new walking router in Walk mode. Default is `"Walk"`. The selection is saved for rejoin recovery. Change the loader value and rejoin to switch an already running session.
 - `MainAccount` is the Roblox **username**, not display name. Matching is case-insensitive. The matching account is main; other accounts using the same group are alts.
 - Use the same `MainAccount` and `Group` on every participating account. A nonempty group requires a main username.
 - Empty `Group` disables grouped roles. Group is this script's shared coordination room, not a Roblox group ID. Room names are not authenticated access controls.
+- Main/alt group coordination applies to Vicious mode. Fireflies mode farms independently on each account; it preserves but does not use the group settings.
 
 The loader downloads `TifaHop.luau` and calls it with the configuration table. It caches the backend as `TifaHop/source_premium.lua` for the original rejoin bootstrap. Each account's loader configuration is saved under `TifaHop/loader_<UserId>.json`; the cached backend can reload it when a server transition starts a new session.
 
 The requested controls override the old saved settings at startup. Other features retain the recovered defaults and original UI controls. This does not remove UI tabs or features from the underlying program.
+
+## Claim hive before Vicious Bees
+
+The `hive-v1` build gates both Vicious search and combat on confirmed hive ownership. It invokes the session's existing hive-claim implementation, waits for the player's Honeycomb reference or matching hive/platform owner to replicate, and waits for a nonnegative spawn position. A successful return from the claim routine alone is not accepted. Existing ownership avoids unnecessary reclaims. Claims retry twice; stopped workers exit promptly, and failure pauses Vicious activity with a status message.
+
+The current `grind-v1` release includes this hive-first behavior and applies it to Fireflies mode too.
+
+## Fireflies grind mode
+
+Fireflies mode follows the supplied Atlas behavior: find stationary Firefly objects in NPCBees using BodyVelocity, operate during the 19:00–05:00 night window, travel to the containing field, approach on the ground, suppress immediate revisits for two seconds, and use the existing token collection engine for nearby drops. Failed targets are temporarily skipped. The original Start/Stop and generation-token checks control the worker.
+
+When no usable fireflies are found for 20 seconds, or after a 180-second server session, it invokes the existing server hopper and restores the selected configuration in the new server. It searches successive servers for night/fireflies; it cannot guarantee that an arbitrary destination server is at night. With `DontHop = true`, it remains in the current server and keeps checking. It does not activate the reference's unrelated memory-match, conversion or item-use features.
+
+## Red Cannon shortcuts
+
+The map planner can use the reference's four Red Cannon entry nodes and 21 landing profiles. Cannon edges are priced by expected flight time, so they are selected only when the calculated route is cheaper. Execution approaches the real platform, checks for `Fire the Red Cannon`, activates it using the existing input API, follows the reference's jump/glider timing and waits for landing. A locked prompt or missed landing disables cannon shortcuts for the session, allowing replanning on foot. Cancel/Stop interrupts the flight sequence.
 
 ## Walking to Vicious Bees
 

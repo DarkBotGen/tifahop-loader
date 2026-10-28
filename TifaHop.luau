@@ -24,7 +24,7 @@ if options == nil and readfile and isfile and isfile(configPath) then
 end
 if options == nil then options = {} end
 assert(type(options) == "table", "TifaHop configuration must be a table")
-local allowed = {MinViciousLevel=true, MaxViciousLevel=true, DontHop=true, MainAccount=true, Group=true, ViciousMovement=true}
+local allowed = {MinViciousLevel=true, MaxViciousLevel=true, DontHop=true, MainAccount=true, Group=true, ViciousMovement=true, Mode=true, UseRedCannon=true}
 for key in pairs(options) do assert(allowed[key], "Unknown TifaHop setting: " .. tostring(key)) end
 local function level(key, fallback)
   local value = options[key]
@@ -41,23 +41,31 @@ assert(type(dontHop)=="boolean", "DontHop must be true or false")
 local viciousMovement = options.ViciousMovement
 if viciousMovement == nil then viciousMovement = "Walk" end
 assert(viciousMovement=="Walk" or viciousMovement=="Tween", "ViciousMovement must be Walk or Tween")
+local farmMode=options.Mode
+if farmMode==nil then farmMode="Vicious" end
+assert(farmMode=="Vicious" or farmMode=="Fireflies", "Mode must be Vicious or Fireflies")
+local useRedCannon=options.UseRedCannon
+if useRedCannon==nil then useRedCannon=true end
+assert(type(useRedCannon)=="boolean", "UseRedCannon must be true or false")
+local navigationInput, fireflyCollectStep, fireflyTravel
 local mainAccount = options.MainAccount or ""
 local group = options.Group or ""
 assert(type(mainAccount)=="string", "MainAccount must be a Roblox username, or an empty string")
 assert(type(group)=="string", "Group must be a shared room name, or an empty string")
 mainAccount = mainAccount:match("^%s*(.-)%s*$")
 group = group:match("^%s*(.-)%s*$")
-local grouped = group ~= ""
+local grouped = group ~= "" and farmMode=="Vicious"
 assert(not grouped or mainAccount ~= "", "Set MainAccount when using a Group")
 local isMain = grouped and player.Name:lower() == mainAccount:lower()
 local UserConfig = {
   mode="vichop", minlvl=minLevel, maxlvl=maxLevel, donthop=dontHop, movement=viciousMovement,
-  room=group, main=isMain, alt=grouped and not isMain,
+  room=grouped and group or "", main=isMain, alt=grouped and not isMain, cannon=useRedCannon,
 }
 shared.TifaHop = {
   MinViciousLevel=minLevel, MaxViciousLevel=maxLevel, DontHop=dontHop,
   MainAccount=mainAccount, Group=group,
   ViciousMovement=viciousMovement,
+  Mode=farmMode, UseRedCannon=useRedCannon,
 }
 -- Original native overrides are applied after saved settings. Supplying these
 -- makes the loader settings authoritative during startup without polling.
@@ -85,7 +93,7 @@ local function rebrandString(value)
 end
 
 -- Static navigation coordinates and walk/jump links extracted from the user-provided Atlas source.
--- Special cannon, portal, glider and interaction links are excluded.
+-- Baseline links exclude interactions; Red Cannon shortcuts are defined separately below.
 local routeNodes = {
   [1] = Vector3.new(47, 30, 479),
   [2] = Vector3.new(47, 30, 492),
@@ -6962,7 +6970,37 @@ local routeLinks = {
   [3657] = {[3655]="",[3656]="",[3658]=""},
   [3658] = {[2488]="",[3632]="",[3634]="",[3637]="",[3638]=""},
 }
+local redCannonLinks = {
+  [2798] = {[2743]="20BeeGate",[411]="Badge Guild",[70]="Bamboo Field",[326]="Blue Flower Field",[361]="Blue HQ",[777]="Brown Bear",[577]="Cactus Field",[685]="Clover Field",[1617]="Honey Bee",[973]="Mountain Top Field",[3362]="Mythic Meteor Shower",[438]="Pine Tree Forest",[1737]="Pineapple Patch",[3171]="Polar Bear",[570]="Pumpkin Patch",[1876]="Rose Field",[2426]="Spider Field",[2489]="Star Hall",[2524]="Strawberry Field",[2584]="Stump Field",[1792]="Treat Dispenser"},
+  [2799] = {[2743]="20BeeGate",[411]="Badge Guild",[70]="Bamboo Field",[326]="Blue Flower Field",[361]="Blue HQ",[777]="Brown Bear",[577]="Cactus Field",[685]="Clover Field",[1617]="Honey Bee",[973]="Mountain Top Field",[3362]="Mythic Meteor Shower",[438]="Pine Tree Forest",[1737]="Pineapple Patch",[3171]="Polar Bear",[570]="Pumpkin Patch",[1876]="Rose Field",[2426]="Spider Field",[2489]="Star Hall",[2524]="Strawberry Field",[2584]="Stump Field",[1792]="Treat Dispenser"},
+  [2800] = {[2743]="20BeeGate",[411]="Badge Guild",[70]="Bamboo Field",[326]="Blue Flower Field",[361]="Blue HQ",[777]="Brown Bear",[577]="Cactus Field",[685]="Clover Field",[1617]="Honey Bee",[973]="Mountain Top Field",[3362]="Mythic Meteor Shower",[438]="Pine Tree Forest",[1737]="Pineapple Patch",[3171]="Polar Bear",[570]="Pumpkin Patch",[1876]="Rose Field",[2426]="Spider Field",[2489]="Star Hall",[2524]="Strawberry Field",[2584]="Stump Field",[1792]="Treat Dispenser"},
+  [2801] = {[2743]="20BeeGate",[411]="Badge Guild",[70]="Bamboo Field",[326]="Blue Flower Field",[361]="Blue HQ",[777]="Brown Bear",[577]="Cactus Field",[685]="Clover Field",[1617]="Honey Bee",[973]="Mountain Top Field",[3362]="Mythic Meteor Shower",[438]="Pine Tree Forest",[1737]="Pineapple Patch",[3171]="Polar Bear",[570]="Pumpkin Patch",[1876]="Rose Field",[2426]="Spider Field",[2489]="Star Hall",[2524]="Strawberry Field",[2584]="Stump Field",[1792]="Treat Dispenser"},
+}
+local redCannonProfiles = {
+  ["20BeeGate"]={Node=2743,Delay=0.6,Flight=5.0,Glide=true,OffsetZ=0},
+  ["Badge Guild"]={Node=411,Delay=0.95,Flight=4.7,Glide=true,OffsetZ=0},
+  ["Bamboo Field"]={Node=70,Delay=1.25,Flight=2.0,Glide=true,OffsetZ=0},
+  ["Blue Flower Field"]={Node=326,Delay=0.7,Flight=3.3,Glide=true,OffsetZ=0},
+  ["Blue HQ"]={Node=361,Delay=0.7,Flight=4.4,Glide=true,OffsetZ=0},
+  ["Brown Bear"]={Node=777,Delay=1.4,Flight=6.0,Glide=true,OffsetZ=0},
+  ["Cactus Field"]={Node=577,Delay=0.95,Flight=2.7,Glide=true,OffsetZ=0},
+  ["Clover Field"]={Node=685,Delay=0.5,Flight=4.0,Glide=true,OffsetZ=0},
+  ["Honey Bee"]={Node=1617,Delay=1.15,Flight=6.0,Glide=true,OffsetZ=0},
+  ["Mountain Top Field"]={Node=973,Delay=2.25,Flight=0,Glide=false,OffsetZ=0},
+  ["Mythic Meteor Shower"]={Node=3362,Delay=0.95,Flight=0,Glide=true,OffsetZ=0},
+  ["Pine Tree Forest"]={Node=438,Delay=0.925,Flight=5.0,Glide=true,OffsetZ=0},
+  ["Pineapple Patch"]={Node=1737,Delay=1.85,Flight=3.0,Glide=true,OffsetZ=20},
+  ["Polar Bear"]={Node=3171,Delay=1.2,Flight=1.4,Glide=true,OffsetZ=0},
+  ["Pumpkin Patch"]={Node=570,Delay=0.95,Flight=3.5,Glide=true,OffsetZ=0},
+  ["Rose Field"]={Node=1876,Delay=0.55,Flight=3.0,Glide=true,OffsetZ=0},
+  ["Spider Field"]={Node=2426,Delay=0.9,Flight=0.3,Glide=true,OffsetZ=0},
+  ["Star Hall"]={Node=2489,Delay=0.75,Flight=4.15,Glide=true,OffsetZ=0},
+  ["Strawberry Field"]={Node=2524,Delay=0.7,Flight=1.8,Glide=true,OffsetZ=0},
+  ["Stump Field"]={Node=2584,Delay=1.85,Flight=5.4,Glide=true,OffsetZ=0},
+  ["Treat Dispenser"]={Node=1792,Delay=1.6,Flight=2.3,Glide=true,OffsetZ=0},
+}
 -- Atlas-style map routing: authored inter-field routes and grounded final legs.
+local redCannonReady, travelRedCannon
 local function horizontalDistance(a,b)
   return Vector3.new(a.X-b.X,0,a.Z-b.Z).Magnitude
 end
@@ -7015,7 +7053,9 @@ local function findMapRoute(from,to,excludedEdges,excludedStarts,isRunning)
     return first[1]
   end
   local cost,parent,labels,closed={[start]=0},{},{},{}
-  push(start,(routeNodes[start]-routeNodes[goal]).Magnitude)
+  local cannonEnabled=useRedCannon and redCannonReady and redCannonReady()
+  local function heuristic(id) return cannonEnabled and 0 or (routeNodes[id]-routeNodes[goal]).Magnitude end
+  push(start,heuristic(start))
   local expansions=0
   while #heap>0 do
     local current=pop()
@@ -7032,12 +7072,19 @@ local function findMapRoute(from,to,excludedEdges,excludedStarts,isRunning)
         return result
       end
       closed[current]=true
-      for neighbor,label in pairs(routeLinks[current] or {}) do
+      local neighbors={}
+      for neighbor,label in pairs(routeLinks[current] or {}) do neighbors[neighbor]=label end
+      if cannonEnabled then
+        for neighbor,label in pairs(redCannonLinks[current] or {}) do neighbors[neighbor]="RedCannon:"..label end
+      end
+      for neighbor,label in pairs(neighbors) do
         if routeNodes[neighbor] and not closed[neighbor] and not excludedEdges[current..":"..neighbor] then
-          local nextCost=cost[current]+(routeNodes[neighbor]-routeNodes[current]).Magnitude
+          local profile=label:sub(1,10)=="RedCannon:" and redCannonProfiles[label:sub(11)] or nil
+          local travelCost=profile and (profile.Delay+profile.Flight+3)*24 or (routeNodes[neighbor]-routeNodes[current]).Magnitude
+          local nextCost=cost[current]+travelCost
           if cost[neighbor]==nil or nextCost<cost[neighbor] then
             cost[neighbor],parent[neighbor],labels[neighbor]=nextCost,current,label
-            push(neighbor,nextCost+(routeNodes[neighbor]-routeNodes[goal]).Magnitude)
+            push(neighbor,nextCost+heuristic(neighbor))
           end
         end
       end
@@ -7069,6 +7116,7 @@ local function walkMapTo(destination,isRunning,setStatus)
   local params=routeFilter()
   local function walkStep(point)
     local position=point.Position
+    if point.Label:sub(1,10)=="RedCannon:" then return travelRedCannon(point,active,setStatus) end
     if near(position,4) then return true end
     local jump=point.Label=="Jump" or point.Label=="Jump1" or point.Label=="MultiJump" or point.Label=="CoconutJump" or point.Label=="Night"
     local began,lastProgress,lastMove,lastJump=os.clock(),os.clock(),-math.huge,-math.huge
@@ -7155,6 +7203,217 @@ local function walkToVicious(target,isRunning,setStatus)
     if not field then return false end
   end
   return false
+end
+
+-- Red Cannon timing profiles come from the supplied Atlas route handlers.
+-- Walk to the actual platform, require the genuine activation prompt, and
+-- use the existing input API. A failed launch disables shortcuts this session.
+local cannonUnavailable=false
+redCannonReady=function()
+  if cannonUnavailable or not navigationInput or type(navigationInput.pressActivateButton)~="function" then return false end
+  local toys=workspace:FindFirstChild("Toys")
+  local cannon=toys and toys:FindFirstChild("Red Cannon")
+  return cannon and cannon:FindFirstChild("Platform")~=nil
+end
+travelRedCannon=function(point,isRunning,setStatus)
+  local label=point.Label:sub(11)
+  local profile=redCannonProfiles[label]
+  if not profile or not redCannonReady() then return false end
+  local character=player.Character
+  local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+  local root=character and character:FindFirstChild("HumanoidRootPart")
+  if not humanoid or not root then return false end
+  local function active() return isRunning() and player.Character==character and humanoid.Health>0 end
+  local heartbeat=game:GetService("RunService").Heartbeat
+  local function waitFor(seconds)
+    local untilTime=os.clock()+seconds
+    while active() and os.clock()<untilTime do heartbeat:Wait() end
+    return active()
+  end
+  local platform=workspace.Toys["Red Cannon"].Platform
+  local approached=os.clock()
+  while active() and (root.Position-platform.Position).Magnitude>9 and os.clock()-approached<4 do
+    humanoid:MoveTo(platform.Position); heartbeat:Wait()
+  end
+  if not active() then return false end
+  local ok,prompt=pcall(function() return navigationInput:pressActivateButton() end)
+  if not ok or prompt~="Fire the Red Cannon" then
+    cannonUnavailable=true
+    setStatus("Red Cannon unavailable; using walking routes")
+    return false
+  end
+  setStatus("Red Cannon to "..label)
+  local launchPosition=root.Position
+  local fired=pcall(function() navigationInput:pressActivateButton(true) end)
+  if not fired then cannonUnavailable=true; return false end
+  if not waitFor(profile.Delay) then return false end
+  if (root.Position-launchPosition).Magnitude<15 and (root.Position-point.Position).Magnitude>20 then
+    cannonUnavailable=true
+    setStatus("Red Cannon did not launch; replanning on foot")
+    return false
+  end
+  if profile.Glide then
+    if type(navigationInput.pressKey)~="function" then cannonUnavailable=true; return false end
+    navigationInput.pressKey(Enum.KeyCode.Space)
+    navigationInput.pressKey(Enum.KeyCode.Space)
+    humanoid:MoveTo(point.Position+Vector3.new(0,0,profile.OffsetZ))
+    if not waitFor(profile.Flight) then
+      pcall(navigationInput.pressKey,Enum.KeyCode.Space)
+      return false
+    end
+    navigationInput.pressKey(Enum.KeyCode.Space)
+    humanoid:MoveTo(root.Position)
+  end
+  local landingDeadline=os.clock()+12
+  while active() and humanoid.FloorMaterial==Enum.Material.Air and os.clock()<landingDeadline do heartbeat:Wait() end
+  if not active() then return false end
+  if humanoid.FloorMaterial==Enum.Material.Air or horizontalDistance(root.Position,point.Position)>100
+    or math.abs(root.Position.Y-point.Position.Y)>35 then
+    cannonUnavailable=true
+    setStatus("Red Cannon landing missed; replanning on foot")
+    return false
+  end
+  return true
+end
+
+-- The native claim routine can return before server ownership replicates.
+-- Vicious workers must wait for an actual ownership marker, not its return value.
+local claimHiveForSession
+local function confirmedHive()
+  local honeycomb=player:FindFirstChild("Honeycomb")
+  local owned=honeycomb and honeycomb.Value
+  if owned and owned.Parent then
+    local owner=owned:FindFirstChild("Owner")
+    if owner and owner.Value~=player then owned=nil end
+  end
+  if not owned or not owned.Parent then
+    owned=nil
+    local platforms=workspace:FindFirstChild("HivePlatforms")
+    if platforms then
+      for _,platform in ipairs(platforms:GetChildren()) do
+        local reference=platform:FindFirstChild("PlayerRef")
+        if reference and reference.Value==player then owned=platform; break end
+      end
+    end
+    if not owned then
+      local hives=workspace:FindFirstChild("Honeycombs")
+      if hives then
+        for _,hive in ipairs(hives:GetChildren()) do
+          local owner=hive:FindFirstChild("Owner")
+          if owner and owner.Value==player then owned=hive; break end
+        end
+      end
+    end
+  end
+  if not owned then return nil end
+  -- The reference also waits for the player's spawn position to become valid.
+  local spawn=player:FindFirstChild("SpawnPos")
+  if spawn and spawn.Value and spawn.Value.Position.Y<0 then return nil end
+  return owned
+end
+local function ensureHiveClaimed(isRunning,setStatus)
+  if not isRunning() then return false end
+  if confirmedHive() then return true end
+  setStatus("Claiming hive before "..(farmMode=="Fireflies" and "Firefly farming" or "Vicious Bee"))
+  if not claimHiveForSession then
+    setStatus("Hive claim routine is not ready")
+    return false
+  end
+  for attempt=1,2 do
+    if not isRunning() then return false end
+    if confirmedHive() then return true end
+    local ok,reason=pcall(claimHiveForSession)
+    local deadline=os.clock()+3
+    repeat
+      if not isRunning() then return false end
+      if confirmedHive() then setStatus("Hive claimed"); return true end
+      task.wait(0.1)
+    until os.clock()>=deadline
+    if not ok then warn("[TifaHop] Hive claim attempt failed: "..tostring(reason)) end
+  end
+  setStatus("Cannot confirm hive ownership; farming is paused")
+  warn("[TifaHop] Claim an available hive before starting; farming was not started")
+  return false
+end
+
+-- Atlas firefly behavior: NPCBees/Firefly, stationary BodyVelocity, night
+-- window 19:00..05:00, two-second revisit suppression, and token looting.
+local function findStationaryFirefly(recent,blocked)
+  local folder=workspace:FindFirstChild("NPCBees")
+  local character=player.Character
+  local root=character and character:FindFirstChild("HumanoidRootPart")
+  if not folder or not root then return nil end
+  local best,bestDistance=nil,math.huge
+  for _,fly in ipairs(folder:GetChildren()) do
+    if fly.Name=="Firefly" and fly.Parent then
+      local velocity=fly:FindFirstChild("BodyVelocity")
+      if velocity and velocity.Velocity.Magnitude<=0.1
+        and (not recent[fly] or os.clock()-recent[fly]>=2)
+        and (not blocked[fly] or os.clock()>=blocked[fly]) then
+        local distance=(fly.Position-root.Position).Magnitude
+        if distance<bestDistance and fieldUnder(fly.Position) then best,bestDistance=fly,distance end
+      end
+    end
+  end
+  return best
+end
+local function runFireflyGrind(isRunning,setStatus,hop,state)
+  local lighting=game:GetService("Lighting")
+  local recent,blocked={},{}
+  local idleSince,sessionStarted=os.clock(),os.clock()
+  local touched=0
+  local function active() return isRunning() and not state.hopping and not state.rescuing end
+  local function waitFor(seconds)
+    local deadline=os.clock()+seconds
+    while active() and os.clock()<deadline do task.wait(0.1); state.act=os.clock() end
+  end
+  while active() do
+    state.act=os.clock()
+    local night=lighting.ClockTime>=19 or lighting.ClockTime<=5
+    local fly=night and findStationaryFirefly(recent,blocked) or nil
+    if fly then
+      local field=fieldUnder(fly.Position)
+      state.busy=true
+      setStatus("Fireflies: "..field.Name)
+      local ok,reason=pcall(function()
+        if not fireflyTravel or not fireflyCollectStep then error("Firefly farming callbacks are not ready") end
+        fireflyTravel(field.Position+Vector3.new(0,3,0),field.Name)
+        if not active() or not fly.Parent then return end
+        local goal=Vector3.new(fly.Position.X,field.Position.Y+3,fly.Position.Z)
+        if not walkMapTo(goal,active,setStatus) then error("return",0) end
+        recent[fly]=os.clock()
+        touched+=1; idleSince=os.clock()
+        state.fireflies=touched
+        state.farming=true
+        local lootUntil=os.clock()+3
+        while active() and os.clock()<lootUntil do
+          fireflyCollectStep({loot=true,ignoreprio=true,ignorefield=true,ignoreflower=true,range=35,origin=goal})
+          task.wait(0.1); state.act=os.clock()
+        end
+      end)
+      state.busy=false; state.farming=false
+      if not ok then
+        blocked[fly]=os.clock()+30
+        if tostring(reason)~="return" then warn("[TifaHop] Firefly farming: "..tostring(reason)) end
+      end
+    else
+      setStatus(night and "Looking for stationary fireflies" or "Waiting for a night server")
+      waitFor(1)
+    end
+    if active() and (os.clock()-idleSince>=20 or os.clock()-sessionStarted>=180) then
+      if dontHop then
+        setStatus("Fireflies: staying in this server (DontHop)")
+        idleSince=os.clock(); sessionStarted=os.clock()
+      else
+        setStatus("Fireflies: hopping for a fresh night server")
+        state.busy=false; state.farming=false
+        hop()
+        waitFor(2)
+        return
+      end
+    end
+  end
+  state.busy=false; state.farming=false
 end
 
 
@@ -8830,6 +9089,7 @@ Functions.initialize_automation = function(U, ...)
                       R[80] = {R[80]}
                       do local captures={R[77],R[10],R[30],R[78],R[36],R[79],R[67],R[55],R[38]}; R[81]=function(...) return Functions.main_0_51(captures,...) end end
                       R[80][1] = R[81]
+                      claimHiveForSession = R[80][1]; navigationInput=R[55][1]; fireflyTravel=R[67][1] -- session callbacks
                       R[81] = {}
                       R[81] = {R[81]}
                       R[82] = env["ipairs"]
@@ -11849,6 +12109,7 @@ Functions.initialize_automation = function(U, ...)
                     R[100] = {R[100]}
                     do local captures={R[30],R[6],R[48],R[97],R[98],R[94],R[95],R[99],R[73],R[51],R[50]}; R[101]=function(...) return Functions.main_0_72(captures,...) end end
                     R[100][1] = R[101]
+                    fireflyCollectStep=R[100][1] -- existing token collection engine
                     for i=101,101 do R[i]=nil end
                     R[101] = {R[101]}
                     do local captures={R[6],R[50],R[100]}; R[102]=function(...) return Functions.main_0_73(captures,...) end end
@@ -44623,6 +44884,7 @@ Functions.main_0_126 = function(U, ...)
   local vn=math.max(0,argv.n-2)
   for i=1,vn do V[i]=argv[2+i] end
   local top=0
+  if not ensureHiveClaimed(function() return U[6][1](argv[2]) end, U[4][1]) then return end -- confirm again before Vicious combat
   local pc = 1
   while true do
     if pc < 1 or pc > 1342 then error("Invalid instruction address in main_0_126", 0) end
@@ -46595,6 +46857,8 @@ Functions.main_0_128 = function(U, ...)
   local vn=math.max(0,argv.n-1)
   for i=1,vn do V[i]=argv[1+i] end
   local top=0
+  if not ensureHiveClaimed(function() return U[5][1](argv[1]) end, U[1][1]) then return end -- claim before Vicious search
+  if farmMode=="Fireflies" then return runFireflyGrind(function() return U[5][1](argv[1]) end,U[1][1],U[10][1],U[6][1]) end
   local pc = 1
   while true do
     if pc < 1 or pc > 478 then error("Invalid instruction address in main_0_128", 0) end
@@ -78175,6 +78439,7 @@ Functions.main_0_183_27 = function(U, ...)
   local vn=math.max(0,argv.n-1)
   for i=1,vn do V[i]=argv[1+i] end
   local top=0
+  if farmMode=="Fireflies" and argv[1]=="vichop" then return "Fireflies" end
   local pc = 1
   while true do
     if pc < 1 or pc > 55 then error("Invalid instruction address in main_0_183_27", 0) end

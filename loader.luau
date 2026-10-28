@@ -1,14 +1,16 @@
 -- Use the same MainAccount and Group on your main account and all alts.
 local Config = ... or {
+    Mode = "Vicious", -- "Vicious" or "Fireflies"
     MinViciousLevel = 1,
     MaxViciousLevel = 12,
     DontHop = false,
     ViciousMovement = "Walk", -- "Walk" uses map routes; "Tween" restores flying.
+    UseRedCannon = true, -- Red Cannon shortcuts in walking routes.
     MainAccount = "", -- Roblox username; matching account becomes main.
     Group = "",       -- Shared TifaHop room; empty disables grouping.
 }
 
-local source = game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/routes-v1/TifaHop.luau")
+local source = game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/grind-v1/TifaHop.luau")
 local run, reason = loadstring(source, "@TifaHop")
 assert(run, "[TifaHop] Compilation failed: " .. tostring(reason))
 -- Cache the backend for the script's existing rejoin/teleport bootstrap.
