@@ -10,6 +10,25 @@ while not players.LocalPlayer do task.wait() end
 local player = players.LocalPlayer
 local configPath = "TifaHop/loader_" .. tostring(player.UserId) .. ".json"
 local http = game:GetService("HttpService")
+local farmPath="TifaHop/farm_"..tostring(player.UserId)..".txt"
+local function validFarmSelection(value)
+return value=="vichop" or value=="fireflies" or value=="sprouts" or value=="windy" or value=="mondo"
+end
+local selectedFarm=shared.TifaHopSelectedFarm
+if not validFarmSelection(selectedFarm) and readfile and isfile and isfile(farmPath) then
+local ok,value=pcall(readfile,farmPath)
+if ok and validFarmSelection(value) then selectedFarm=value end
+end
+if not validFarmSelection(selectedFarm) then selectedFarm=nil end
+local function rememberFarmSelection(value)
+if not validFarmSelection(value) then return end
+selectedFarm=value
+shared.TifaHopSelectedFarm=value
+if writefile then
+local ok,reason=pcall(writefile,farmPath,value)
+if not ok then warn("[TifaHop] Could not save selected farm: "..tostring(reason)) end
+end
+end
 if options == nil then options = shared.TifaHop end
 if options == nil and readfile and isfile and isfile(configPath) then
 local ok, saved = pcall(function() return http:JSONDecode(readfile(configPath)) end)
@@ -80,6 +99,7 @@ local speedCharacter, originalSpeed, lastWrittenSpeed
 local function refreshWalkingSpeed()
 local settings=speedSettings or UserConfig
 settings.tweenmovement=false
+if selectedFarm then settings.mode=selectedFarm end
 local enabled=settings.walkspeedon==true
 local value=math.clamp(tonumber(settings.walkspeed) or walkingSpeed,1,100)
 local character=player.Character
@@ -108,6 +128,7 @@ end
 end
 local function applyUserConfig(settings)
 for key,value in pairs(UserConfig) do settings[key]=value end
+if selectedFarm then settings.mode=selectedFarm end
 speedSettings=settings
 pcall(function()
 if shared.TifaHopSpeedConnection then shared.TifaHopSpeedConnection:Disconnect() end
@@ -10081,7 +10102,7 @@ R[197] = "applylow"
 do local captures={R[2],R[6]}; R[198]=function(...) return Functions.main_0_182(captures,...) end end
 R[196][R[197]] = R[198]
 do local captures={R[16],R[8],R[18],R[40],R[32],R[7],R[2],R[12],R[24],R[30],R[193],R[192],R[33],R[11],R[113],R[17],R[23],R[145],R[0],R[153],R[155],R[154],R[38],R[112],R[19],R[195],R[21],R[22],R[76],R[37],R[114],R[128],R[194],R[14],R[27],R[29]}; R[196]=function(...) return Functions.main_0_183(captures,...) end end
-applyUserConfig(R[18][1]) -- final settings before UI construction
+applyUserConfig(R[18][1]); rememberFarmSelection(R[18][1].mode) -- persist final selection before UI construction
 R[197] = R[196]
 do local result=pack(R[197](unpack(R,198,197))); for i=1,0 do R[197+i-1]=result[i] end end
 do return unpack(R,0,-1) end
@@ -11522,7 +11543,7 @@ pc = 4329
 R[29] = R[18][1]
 R[30] = "mode"
 R[31] = "vichop"
-R[29][R[30]] = R[31]
+if not validFarmSelection(R[29][R[30]]) then R[29][R[30]]=R[31] end -- recognize all GUI farms
 pc = 2014
 else
 pc = 4348
@@ -51168,6 +51189,7 @@ for i=1,0 do R[i-1]=argv[i] end
 local vn=math.max(0,argv.n-0)
 for i=1,vn do V[i]=argv[0+i] end
 local top=0
+local chosen=selectedFarm or U[1][1].mode; if validFarmSelection(chosen) then return chosen end -- no automatic farm override
 local pc = 1
 while true do
 if pc < 1 or pc > 58 then error("Invalid instruction address in main_0_161", 0) end
@@ -66119,6 +66141,7 @@ for i=1,1 do R[i-1]=argv[i] end
 local vn=math.max(0,argv.n-1)
 for i=1,vn do V[i]=argv[1+i] end
 local top=0
+if validFarmSelection(argv[1]) then local changed=U[2][1].mode~=argv[1]; U[1][1]=argv[1]; if changed and U[3][1].on then U[4][1]() end; U[2][1].mode=argv[1]; rememberFarmSelection(argv[1]); U[5][1](); U[6][1](); return end -- explicit selection owns the farm
 if argv[1]=="movement" then U[1][1]="movement"; U[6][1](); return end -- settings tab does not select a farm
 local pc = 1
 while true do
