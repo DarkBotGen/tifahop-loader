@@ -19,7 +19,7 @@ local Config = {
 Or launch the hosted loader directly with those same five controls:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/refs/heads/main/loader.luau?version=keyless-1"))({
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/keyless-v1/loader.luau"))({
     MinViciousLevel = 1,
     MaxViciousLevel = 12,
     DontHop = false,
