@@ -1,6 +1,6 @@
 # TifaHop — walking and normal interactions
 
-The `gui-fireflies-v2` build uses normal Humanoid walking and visible, in-range game interactions. It removes the recovered direct game-remote invocation helpers, flying/tween movement, noclip helper, tween-to-token shortcut and Vicious fighting platform. Legacy `ViciousMovement = "Tween"` configurations are converted to Walk. UI animation tweens are unrelated to character movement.
+The `movement-cannon-v1` build adds a Movement tab for Walk/Tween selection, tween speed, walking speed, dynamic walking speed and Red Cannon use. Hive claiming always walks to the visible in-range Claim Hive interaction.
 
 This does not establish that automation is permitted by the game or guarantee against account action. Live gameplay has not been tested.
 
@@ -9,8 +9,9 @@ This does not establish that automation is permitted by the game or guarantee ag
 Rejoin before switching from an earlier running build. Then execute this and press Start:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/gui-fireflies-v2/loader.luau"))({
-    ViciousMovement = "Walk",
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/movement-cannon-v1/loader.luau"))({
+    ViciousMovement = "Walk", -- or Tween; also selectable in Movement
+    TweenSpeed = 50,
     UseRedCannon = true,
     DontHop = false,
     WalkSpeedEnabled = true,
@@ -29,7 +30,7 @@ The script searches first and claims no hive on an empty server. After selecting
 ## Movement and interaction limits
 
 - Walking uses 3,439 route nodes and 22,048 baseline walk/jump links from the supplied Atlas reference. Normal jump waypoints are supported; there is no character-position assignment, flying physics or noclip fallback.
-- Vicious combat stays on the field and uses normal MoveTo and the existing physically collected token engine. Bees perform normal attacks. No fighting platform is created, and the character's real game WalkSpeed is retained. Ground combat can behave differently from the former platform strategy.
+- Vicious combat stays on the field and uses normal MoveTo and the existing physically collected token engine. Bees perform normal attacks. No fighting platform is created, and uses your configured walking speed. Ground combat can behave differently from the former platform strategy.
 - Red Cannon shortcuts are optional. The character walks to the real platform and must be close enough for the genuine `Fire the Red Cannon` prompt before E is sent. Only the game's cannon trajectory and normal glider inputs move the character through the air. Locked prompts, missed launches or landings cause walking replanning.
 - Equipped tools use their normal Activate action. Automatic remote-based sprinkler and planter actions are disabled. Legacy generic game-remote interaction helpers are disabled. Honey conversion activation, if used, requires proximity to the owned hive and the game's matching honey-making prompt.
 - Server hopping through TeleportService is retained, as requested. It is separate from movement within the map. `DontHop = true` disables the ordinary farming hop decisions; the separate original error/rejoin recovery still exists.
@@ -51,3 +52,9 @@ Ground combat avoids visible nearby WarningDisk, spike and impale parts in works
 ## Select farming in the GUI
 
 Select Vichop, Fireflies, Sprouts or Windy, then enable Start. Changing the selected farm stops the current run; press Start for the new farm. The existing GUI settings save the selection across reloads. Fireflies has its own section and uses normal hive claiming, walking, night-server hopping and token collection. The loader no longer sets or overrides farming mode. Older Mode entries are ignored. Farm tabs use two rows to fit the Fireflies label.
+
+## Cannon preference
+
+With Red Cannon enabled, eligible travel between fields commits to walking to the cannon, launching and steering toward the destination before finishing locally. It does not reselect a cheaper walking route after reaching the cannon. Pepper Patch always uses normal walking. Local positioning and hive claiming do not return to the cannon. Missing/unavailable cannon uses ordinary movement; a failed committed launch stops that travel and reports failure. The closest authored launch profile is used for destinations without an exact profile, so live landing accuracy remains unverified.
+
+Opening Movement does not change the selected farm. Use tween movement switches the general travel method; tween cancellation handles Stop, death, respawn and toggling back to Walk. Red Cannon preference takes priority for inter-field travel when enabled.

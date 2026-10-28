@@ -5,13 +5,14 @@ local Config = ... or {
     DontHop = false,
     WalkSpeedEnabled = true,
     WalkSpeed = 50,
-    ViciousMovement = "Walk", -- walking-only; legacy Tween values are normalized to Walk.
+    ViciousMovement = "Walk", -- Walk or Tween; change in the Movement tab.
+    TweenSpeed = 50,
     UseRedCannon = true, -- Red Cannon shortcuts in walking routes.
     MainAccount = "", -- Roblox username; matching account becomes main.
     Group = "",       -- Shared TifaHop room; empty disables grouping.
 }
 
-local source = game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/gui-fireflies-v2/TifaHop.luau")
+local source = game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/movement-cannon-v1/TifaHop.luau")
 local run, reason = loadstring(source, "@TifaHop")
 assert(run, "[TifaHop] Compilation failed: " .. tostring(reason))
 -- Cache the backend for the script's existing rejoin/teleport bootstrap.

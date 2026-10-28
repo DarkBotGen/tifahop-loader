@@ -24,7 +24,7 @@ if options == nil and readfile and isfile and isfile(configPath) then
 end
 if options == nil then options = {} end
 assert(type(options) == "table", "TifaHop configuration must be a table")
-local allowed = {MinViciousLevel=true, MaxViciousLevel=true, DontHop=true, MainAccount=true, Group=true, ViciousMovement=true, Mode=true, UseRedCannon=true, WalkSpeedEnabled=true, WalkSpeed=true}
+local allowed = {MinViciousLevel=true, MaxViciousLevel=true, DontHop=true, MainAccount=true, Group=true, ViciousMovement=true, Mode=true, TweenSpeed=true, UseRedCannon=true, WalkSpeedEnabled=true, WalkSpeed=true}
 for key in pairs(options) do assert(allowed[key], "Unknown TifaHop setting: " .. tostring(key)) end
 local function level(key, fallback)
   local value = options[key]
@@ -41,10 +41,6 @@ assert(type(dontHop)=="boolean", "DontHop must be true or false")
 local viciousMovement = options.ViciousMovement
 if viciousMovement == nil then viciousMovement = "Walk" end
 assert(viciousMovement=="Walk" or viciousMovement=="Tween", "ViciousMovement must be Walk")
-if viciousMovement=="Tween" then
-  warn("[TifaHop] Tween movement is disabled; using normal walking")
-  viciousMovement="Walk"
-end
 -- Legacy Mode values are ignored; farming selection belongs to the GUI.
 local useRedCannon=options.UseRedCannon
 if useRedCannon==nil then useRedCannon=true end
@@ -54,6 +50,8 @@ if speedEnabled==nil then speedEnabled=true end
 assert(type(speedEnabled)=="boolean", "WalkSpeedEnabled must be true or false")
 local walkingSpeed=options.WalkSpeed or 50
 assert(type(walkingSpeed)=="number" and walkingSpeed==walkingSpeed and walkingSpeed>=1 and walkingSpeed<=100, "WalkSpeed must be from 1 to 100")
+local tweenSpeed=options.TweenSpeed or 50
+assert(type(tweenSpeed)=="number" and tweenSpeed>=1 and tweenSpeed<=150, "TweenSpeed must be from 1 to 150")
 local navigationInput, fireflyCollectStep, fireflyTravel
 local mainAccount = options.MainAccount or ""
 local group = options.Group or ""
@@ -65,14 +63,14 @@ local grouped = group ~= ""
 assert(not grouped or mainAccount ~= "", "Set MainAccount when using a Group")
 local isMain = grouped and player.Name:lower() == mainAccount:lower()
 local UserConfig = {
-  minlvl=minLevel, maxlvl=maxLevel, donthop=dontHop, movement=viciousMovement,
+  minlvl=minLevel, maxlvl=maxLevel, donthop=dontHop, movement=viciousMovement, tweenmovement=viciousMovement=="Tween", tweenspeed=tweenSpeed,
   room=grouped and group or "", main=isMain, alt=grouped and not isMain, cannon=useRedCannon,
-  walkspeedon=speedEnabled, walkspeed=walkingSpeed, walkdynamic=false, fastrare=false, usesprinkler=false, planters=false,
+  walkspeedon=speedEnabled, walkspeed=walkingSpeed,  fastrare=false, usesprinkler=false, planters=false,
 }
 shared.TifaHop = {
   MinViciousLevel=minLevel, MaxViciousLevel=maxLevel, DontHop=dontHop,
   MainAccount=mainAccount, Group=group,
-  ViciousMovement=viciousMovement,
+  ViciousMovement=viciousMovement, TweenSpeed=tweenSpeed,
   UseRedCannon=useRedCannon, WalkSpeedEnabled=speedEnabled, WalkSpeed=walkingSpeed,
 }
 -- Original native overrides are applied after saved settings. Supplying these
@@ -96,13 +94,20 @@ local function refreshWalkingSpeed()
   local humanoid=character and character:FindFirstChildOfClass("Humanoid")
   if humanoid and humanoid.Health>0 then
     if speedCharacter~=humanoid then speedCharacter=humanoid; originalSpeed=humanoid.WalkSpeed; lastWrittenSpeed=nil end
-    if enabled then humanoid.WalkSpeed=value; lastWrittenSpeed=value
+    if enabled then
+      local applied=settings.walkdynamic and math.min(value,originalSpeed*(tonumber(settings.walkmult) or 1.5)) or value
+      humanoid.WalkSpeed=applied; lastWrittenSpeed=applied
     elseif lastWrittenSpeed then
       if humanoid.WalkSpeed==lastWrittenSpeed then humanoid.WalkSpeed=originalSpeed end
       lastWrittenSpeed=nil
     else originalSpeed=humanoid.WalkSpeed end
   end
-  if shared.TifaHop.WalkSpeedEnabled~=enabled or shared.TifaHop.WalkSpeed~=value then
+  useRedCannon=settings.cannon~=false
+  local movement=settings.tweenmovement and "Tween" or "Walk"
+  local tweenValue=math.clamp(tonumber(settings.tweenspeed) or tweenSpeed,1,150)
+  if shared.TifaHop.WalkSpeedEnabled~=enabled or shared.TifaHop.WalkSpeed~=value or shared.TifaHop.ViciousMovement~=movement or shared.TifaHop.TweenSpeed~=tweenValue or shared.TifaHop.UseRedCannon~=settings.cannon then
+    shared.TifaHop.ViciousMovement=movement; shared.TifaHop.TweenSpeed=tweenValue; shared.TifaHop.UseRedCannon=settings.cannon
+    UserConfig.tweenmovement=settings.tweenmovement; UserConfig.tweenspeed=tweenValue; UserConfig.cannon=settings.cannon
     shared.TifaHop.WalkSpeedEnabled=enabled; shared.TifaHop.WalkSpeed=value
     UserConfig.walkspeedon=enabled; UserConfig.walkspeed=value
     shared.walkspeedon=enabled; shared.walkspeed=value
@@ -7040,7 +7045,8 @@ local redCannonProfiles = {
   ["Treat Dispenser"]={Node=1792,Delay=1.6,Flight=2.3,Glide=true,OffsetZ=0},
 }
 -- Atlas-style map routing: authored inter-field routes and grounded final legs.
-local redCannonReady, travelRedCannon
+local redCannonReady, travelRedCannon, preferredCannonTravel
+local fieldUnder
 local function horizontalDistance(a,b)
   return Vector3.new(a.X-b.X,0,a.Z-b.Z).Magnitude
 end
@@ -7137,7 +7143,39 @@ local function findMapRoute(from,to,excludedEdges,excludedStarts,isRunning,allow
   end
   return nil,"No connected walking route"
 end
+local function tweenMapTo(destination,isRunning,setStatus)
+  local character=player.Character
+  local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+  local root=character and character:FindFirstChild("HumanoidRootPart")
+  if not root or not humanoid or humanoid.Health<=0 then return false end
+  local speed=math.clamp(tonumber((speedSettings or UserConfig).tweenspeed) or 50,1,150)
+  local duration=(destination-root.Position).Magnitude/speed
+  if duration<0.02 then return isRunning() end
+  setStatus("Tweening to destination")
+  humanoid:MoveTo(root.Position)
+  local tween=game:GetService("TweenService"):Create(root,TweenInfo.new(duration,Enum.EasingStyle.Linear),{CFrame=CFrame.new(destination)*root.CFrame.Rotation})
+  local done=false
+  local connection=tween.Completed:Connect(function() done=true end)
+  tween:Play()
+  local deadline=os.clock()+duration+2
+  while not done and os.clock()<deadline do
+    if not isRunning() or player.Character~=character or not root.Parent or humanoid.Health<=0 or not (speedSettings or UserConfig).tweenmovement then
+      tween:Cancel(); connection:Disconnect(); return false
+    end
+    game:GetService("RunService").Heartbeat:Wait()
+  end
+  tween:Cancel(); connection:Disconnect()
+  return isRunning() and player.Character==character and humanoid.Health>0 and (root.Position-destination).Magnitude<=7
+end
 local function walkMapTo(destination,isRunning,setStatus,allowCannon)
+  local destinationField=fieldUnder and fieldUnder(destination)
+  local pepper=destinationField and destinationField.Name=="Pepper Patch"
+  if pepper then allowCannon=false end
+  if allowCannon~=false and useRedCannon and preferredCannonTravel then
+    local handled,result=preferredCannonTravel(destination,isRunning,setStatus)
+    if handled then return result end
+  end
+  if allowCannon~=false and (speedSettings or UserConfig or {}).tweenmovement then return tweenMapTo(destination,isRunning,setStatus) end
   if refreshWalkingSpeed then refreshWalkingSpeed() end
   local character=player.Character
   local humanoid=character and character:FindFirstChildOfClass("Humanoid")
@@ -7200,7 +7238,7 @@ local function walkMapTo(destination,isRunning,setStatus,allowCannon)
   if active() then setStatus(reason); warn("[TifaHop] "..reason.."; no flying fallback") end
   return false
 end
-local function fieldUnder(position)
+fieldUnder=function(position)
   local zones=workspace:FindFirstChild("FlowerZones")
   if not zones then return nil end
   local params=RaycastParams.new()
@@ -7321,7 +7359,12 @@ travelRedCannon=function(point,isRunning,setStatus)
     navigationInput.pressKey(Enum.KeyCode.Space)
     navigationInput.pressKey(Enum.KeyCode.Space)
     humanoid:MoveTo(point.Position+Vector3.new(0,0,profile.OffsetZ))
-    if not waitFor(profile.Flight) then
+    local flightUntil=os.clock()+profile.Flight
+    while active() and os.clock()<flightUntil do
+      humanoid:MoveTo(point.Position+Vector3.new(0,0,profile.OffsetZ))
+      heartbeat:Wait()
+    end
+    if not active() then
       pcall(navigationInput.pressKey,Enum.KeyCode.Space)
       return false
     end
@@ -7338,6 +7381,39 @@ travelRedCannon=function(point,isRunning,setStatus)
     return false
   end
   return true
+end
+
+-- Select once for inter-field travel; do not let cost replanning discard the launch.
+preferredCannonTravel=function(destination,isRunning,setStatus)
+  local character=player.Character
+  local root=character and character:FindFirstChild("HumanoidRootPart")
+  if not root or not isRunning() then return true,false end
+  local destinationField=fieldUnder(destination)
+  local currentField=fieldUnder(root.Position)
+  if destinationField and destinationField.Name=="Pepper Patch" then return false end
+  -- Local positioning and collection should not return to the cannon.
+  if (destination-root.Position).Magnitude<45 or (destinationField and destinationField==currentField) then return false end
+  if not redCannonReady() then return false end
+  local label,score=nil,math.huge
+  for name,profile in pairs(redCannonProfiles) do
+    local position=routeNodes[profile.Node]
+    if position then
+      local distance=(position-destination).Magnitude
+      if destinationField and name==destinationField.Name then label=name; break end
+      if distance<score then label=name; score=distance end
+    end
+  end
+  if not label then return false end
+  local platform=workspace.Toys["Red Cannon"].Platform
+  setStatus("Walking to Red Cannon for "..(destinationField and destinationField.Name or label))
+  if not walkMapTo(platform.Position,isRunning,setStatus,false) then return true,false end
+  if not isRunning() then return true,false end
+  if not travelRedCannon({Label="RedCannon:"..label,Position=destination},isRunning,setStatus) then
+    setStatus("Red Cannon route failed; travel stopped")
+    return true,false
+  end
+  -- Finish the landing locally without scheduling another cannon trip.
+  return true,walkMapTo(destination,isRunning,setStatus,false)
 end
 
 -- Walk to a vacant hive and press E only at its visible Claim Hive prompt.
@@ -64157,7 +64233,7 @@ Functions.main_0_183 = function(U, ...)
                 R[82] = "changed"
                 do local captures={U[4]}; R[83]=function(...) return Functions.main_0_183_121(captures,...) end end
                 R[81][R[82]] = R[83]
-                do local result=pack(R[75](unpack(R,76,81))); for i=1,0 do R[75+i-1]=result[i] end end
+                -- obsolete duplicate tween slider removed; Movement owns tween speed
                 R[75] = U[29][1]
                 R[77] = U[3][1]
                 R[78] = "movement"
@@ -65640,7 +65716,7 @@ Functions.main_0_183 = function(U, ...)
                 R[57] = R[53]
                 do local result=pack(R[56](unpack(R,57,57))); for i=1,1 do R[56+i-1]=result[i] end end
                 R[54][R[55]] = R[56]
-                R[54].fireflies=R[7][1](R[53]) -- Fireflies statistics page
+                R[54].movement=R[7][1](R[53]); R[54].fireflies=R[7][1](R[53]) -- Fireflies statistics page
                 R[55] = {}
                 R[54] = {R[54]}
                 R[55] = {R[55]}
@@ -66005,7 +66081,7 @@ Functions.main_0_183 = function(U, ...)
                 R[66][R[67]] = R[75]
                 R[68][R[69]] = R[76]
                 R[70][R[71]] = R[77]
-                R[55][1].fireflies=R[7][1](R[59]); R[10](R[54][1].fireflies,"Firefly hop",function() return "Night servers" end); R[10](R[55][1].fireflies,"Farm stationary fireflies",function() return "Use Start above" end)
+                R[55][1].movement=R[7][1](R[59]); R[12](R[55][1].movement,"Use tween movement","tweenmovement"); R[16](R[55][1].movement,"Tween speed","tweenspeed",1,150); R[12](R[55][1].movement,"Use Red Cannon when walking","cannon"); R[55][1].fireflies=R[7][1](R[59]); R[10](R[54][1].fireflies,"Firefly hop",function() return "Night servers" end); R[10](R[55][1].fireflies,"Farm stationary fireflies",function() return "Use Start above" end)
                 R[60] = R[12]
                 R[62] = R[55][1]
                 R[63] = "vichop"
@@ -66864,7 +66940,7 @@ Functions.main_0_183 = function(U, ...)
                 R[46] = "Plant"
                 for i=1,2 do R[44][0+i]=R[44+i] end
                 for i=1,6 do R[38][0+i]=R[38+i] end
-                table.insert(R[38],3,{"fireflies","Fireflies"}) -- genuine GUI farm selection
+                table.insert(R[38],3,{"fireflies","Fireflies"}); table.insert(R[38],{"movement","Movement"}) -- genuine GUI farm selection
                 R[39] = env["ipairs"]
                 R[40] = R[38]
                 do local result=pack(R[39](unpack(R,40,40))); for i=1,3 do R[39+i-1]=result[i] end end
@@ -67300,7 +67376,7 @@ Functions.main_0_183 = function(U, ...)
                   R[75] = R[12]
                   R[77] = R[55][1]
                   R[78] = "main"
-                  R[76] = R[77][R[78]]
+                  R[76] = R[77].movement
                   R[77] = "Ena"
                   R[78] = "ble wal"
                   R[77] = rebrandString(R[77] .. R[78])
@@ -67312,7 +67388,7 @@ Functions.main_0_183 = function(U, ...)
                   R[76] = R[9][1]
                   R[78] = R[55][1]
                   R[79] = "main"
-                  R[77] = R[78][R[79]]
+                  R[77] = R[78].movement
                   R[78] = "Dyna"
                   R[79] = "mic wa"
                   R[78] = rebrandString(R[78] .. R[79])
@@ -67325,7 +67401,7 @@ Functions.main_0_183 = function(U, ...)
                   R[75] = R[16]
                   R[77] = R[55][1]
                   R[78] = "main"
-                  R[76] = R[77][R[78]]
+                  R[76] = R[77].movement
                   R[77] = "Walk speed"
                   R[78] = "walkspeed"
                   R[79] = 30
@@ -67335,7 +67411,7 @@ Functions.main_0_183 = function(U, ...)
                   R[75] = R[16]
                   R[77] = R[55][1]
                   R[78] = "main"
-                  R[76] = R[77][R[78]]
+                  R[76] = R[77].movement
                   R[77] = "Walk spe"
                   R[78] = "ed mult"
                   R[77] = rebrandString(R[77] .. R[78])
@@ -72862,6 +72938,7 @@ Functions.main_0_183_23 = function(U, ...)
   local vn=math.max(0,argv.n-1)
   for i=1,vn do V[i]=argv[1+i] end
   local top=0
+  if argv[1]=="movement" then U[1][1]="movement"; U[6][1](); return end -- settings tab does not select a farm
   local pc = 1
   while true do
     if pc < 1 or pc > 66 then error("Invalid instruction address in main_0_183_23", 0) end

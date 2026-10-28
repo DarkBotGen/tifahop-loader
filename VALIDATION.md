@@ -17,3 +17,5 @@ Tests use mocked game services. They do not establish successful live traversal/
 - GUI integration checks cover Fireflies page/tab registration, shared Start/status visibility, native stop/save/selection callbacks and a dedicated worker using the run cancellation token. UI layout and gameplay have not been verified in Roblox.
 
 - Fireflies Start regression executes the complete generated dispatcher with its real boxed run-ID representation, then the actual Fireflies worker against spawned nighttime targets. It verifies hive claiming, travel, collection and cancellation before worker startup. The dispatcher now passes the numeric run ID to the active check.
+
+- Movement regression covers Tween speed, cancellation on Stop/mode switch/death, Movement UI settings, and walking-only hive claims. Cannon preference tests cover committed launch routing, exact destination steering, Pepper exclusion, local movement and launch failure without a walking detour.
