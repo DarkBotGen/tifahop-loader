@@ -1,6 +1,6 @@
 # TifaHop — walking and normal interactions
 
-The `movement-cannon-v1` build adds a Movement tab for Walk/Tween selection, tween speed, walking speed, dynamic walking speed and Red Cannon use. Hive claiming always walks to the visible in-range Claim Hive interaction.
+The `movement-cannon-v2` build adds a Movement tab for Walk/Tween selection, tween speed, walking speed, dynamic walking speed and Red Cannon use. Hive claiming always walks to the visible in-range Claim Hive interaction.
 
 This does not establish that automation is permitted by the game or guarantee against account action. Live gameplay has not been tested.
 
@@ -9,9 +9,9 @@ This does not establish that automation is permitted by the game or guarantee ag
 Rejoin before switching from an earlier running build. Then execute this and press Start:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/movement-cannon-v1/loader.luau"))({
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/movement-cannon-v2/loader.luau"))({
     ViciousMovement = "Walk", -- or Tween; also selectable in Movement
-    TweenSpeed = 50,
+    TweenSpeed = 8,
     UseRedCannon = true,
     DontHop = false,
     WalkSpeedEnabled = true,
@@ -58,3 +58,5 @@ Select Vichop, Fireflies, Sprouts or Windy, then enable Start. Changing the sele
 With Red Cannon enabled, eligible travel between fields commits to walking to the cannon, launching and steering toward the destination before finishing locally. It does not reselect a cheaper walking route after reaching the cannon. Pepper Patch always uses normal walking. Local positioning and hive claiming do not return to the cannon. Missing/unavailable cannon uses ordinary movement; a failed committed launch stops that travel and reports failure. The closest authored launch profile is used for destinations without an exact profile, so live landing accuracy remains unverified.
 
 Opening Movement does not change the selected farm. Use tween movement switches the general travel method; tween cancellation handles Stop, death, respawn and toggling back to Walk. Red Cannon preference takes priority for inter-field travel when enabled.
+
+Tween speed now defaults to 8 and is restricted to 4–12 in the GUI and runtime. Older high saved values are clamped to 12. The original script had a 4–40 slider with default 8; this build uses the requested smaller cap.

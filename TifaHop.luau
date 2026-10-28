@@ -50,8 +50,9 @@ if speedEnabled==nil then speedEnabled=true end
 assert(type(speedEnabled)=="boolean", "WalkSpeedEnabled must be true or false")
 local walkingSpeed=options.WalkSpeed or 50
 assert(type(walkingSpeed)=="number" and walkingSpeed==walkingSpeed and walkingSpeed>=1 and walkingSpeed<=100, "WalkSpeed must be from 1 to 100")
-local tweenSpeed=options.TweenSpeed or 50
-assert(type(tweenSpeed)=="number" and tweenSpeed>=1 and tweenSpeed<=150, "TweenSpeed must be from 1 to 150")
+local tweenSpeed=options.TweenSpeed or 8
+assert(type(tweenSpeed)=="number" and tweenSpeed==tweenSpeed and tweenSpeed>0 and tweenSpeed<math.huge, "TweenSpeed must be a positive finite number")
+tweenSpeed=math.clamp(tweenSpeed,4,12)
 local navigationInput, fireflyCollectStep, fireflyTravel
 local mainAccount = options.MainAccount or ""
 local group = options.Group or ""
@@ -104,7 +105,7 @@ local function refreshWalkingSpeed()
   end
   useRedCannon=settings.cannon~=false
   local movement=settings.tweenmovement and "Tween" or "Walk"
-  local tweenValue=math.clamp(tonumber(settings.tweenspeed) or tweenSpeed,1,150)
+  local tweenValue=math.clamp(tonumber(settings.tweenspeed) or tweenSpeed,4,12)
   if shared.TifaHop.WalkSpeedEnabled~=enabled or shared.TifaHop.WalkSpeed~=value or shared.TifaHop.ViciousMovement~=movement or shared.TifaHop.TweenSpeed~=tweenValue or shared.TifaHop.UseRedCannon~=settings.cannon then
     shared.TifaHop.ViciousMovement=movement; shared.TifaHop.TweenSpeed=tweenValue; shared.TifaHop.UseRedCannon=settings.cannon
     UserConfig.tweenmovement=settings.tweenmovement; UserConfig.tweenspeed=tweenValue; UserConfig.cannon=settings.cannon
@@ -7148,7 +7149,7 @@ local function tweenMapTo(destination,isRunning,setStatus)
   local humanoid=character and character:FindFirstChildOfClass("Humanoid")
   local root=character and character:FindFirstChild("HumanoidRootPart")
   if not root or not humanoid or humanoid.Health<=0 then return false end
-  local speed=math.clamp(tonumber((speedSettings or UserConfig).tweenspeed) or 50,1,150)
+  local speed=math.clamp(tonumber((speedSettings or UserConfig).tweenspeed) or 8,4,12)
   local duration=(destination-root.Position).Magnitude/speed
   if duration<0.02 then return isRunning() end
   setStatus("Tweening to destination")
@@ -66081,7 +66082,7 @@ Functions.main_0_183 = function(U, ...)
                 R[66][R[67]] = R[75]
                 R[68][R[69]] = R[76]
                 R[70][R[71]] = R[77]
-                R[55][1].movement=R[7][1](R[59]); R[12](R[55][1].movement,"Use tween movement","tweenmovement"); R[16](R[55][1].movement,"Tween speed","tweenspeed",1,150); R[12](R[55][1].movement,"Use Red Cannon when walking","cannon"); R[55][1].fireflies=R[7][1](R[59]); R[10](R[54][1].fireflies,"Firefly hop",function() return "Night servers" end); R[10](R[55][1].fireflies,"Farm stationary fireflies",function() return "Use Start above" end)
+                R[55][1].movement=R[7][1](R[59]); R[12](R[55][1].movement,"Use tween movement","tweenmovement"); R[16](R[55][1].movement,"Tween speed","tweenspeed",4,12); R[12](R[55][1].movement,"Use Red Cannon when walking","cannon"); R[55][1].fireflies=R[7][1](R[59]); R[10](R[54][1].fireflies,"Firefly hop",function() return "Night servers" end); R[10](R[55][1].fireflies,"Farm stationary fireflies",function() return "Use Start above" end)
                 R[60] = R[12]
                 R[62] = R[55][1]
                 R[63] = "vichop"
