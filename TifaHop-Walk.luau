@@ -12,7 +12,7 @@ local configPath = "TifaHop/loader_" .. tostring(player.UserId) .. ".json"
 local http = game:GetService("HttpService")
 local farmPath="TifaHop/farm_"..tostring(player.UserId)..".txt"
 local function validFarmSelection(value)
-return value=="vichop" or value=="fireflies" or value=="sprouts" or value=="windy" or value=="mondo"
+return value=="vichop" or value=="sprouts" or value=="windy" or value=="mondo"
 end
 local selectedFarm=shared.TifaHopSelectedFarm
 if not validFarmSelection(selectedFarm) and readfile and isfile and isfile(farmPath) then
@@ -7428,7 +7428,21 @@ if confirmedHive() then return true end
 setStatus("Farm target found; claiming a hive")
 local hives=workspace:FindFirstChild("Honeycombs")
 if not hives then setStatus("Hive locations are not loaded"); return false end
+local character=player.Character
+local root=character and character:FindFirstChild("HumanoidRootPart")
+if not root then return false end
+local candidates={}
 for _,hive in ipairs(hives:GetChildren()) do
+local owner=hive:FindFirstChild("Owner")
+local arrow=hive:FindFirstChild("patharrow")
+local base=arrow and arrow:FindFirstChild("Base")
+if owner and owner.Value==nil and base then
+table.insert(candidates,{hive=hive,distance=(base.Position-root.Position).Magnitude})
+end
+end
+table.sort(candidates,function(a,b) return a.distance<b.distance end)
+for _,candidate in ipairs(candidates) do
+local hive=candidate.hive
 if not isRunning() then return false end
 if confirmedHive() then return true end
 local owner=hive:FindFirstChild("Owner")
@@ -7457,90 +7471,6 @@ end
 setStatus("Cannot confirm hive ownership; farming is paused")
 warn("[TifaHop] Claim an available hive before starting; farming was not started")
 return false
-end
-local function findStationaryFirefly(recent,blocked)
-local folder=workspace:FindFirstChild("NPCBees")
-local character=player.Character
-local root=character and character:FindFirstChild("HumanoidRootPart")
-if not folder or not root then return nil end
-local best,bestDistance=nil,math.huge
-for _,fly in ipairs(folder:GetChildren()) do
-if fly.Name=="Firefly" and fly.Parent then
-local velocity=fly:FindFirstChild("BodyVelocity")
-if velocity and velocity.Velocity.Magnitude<=0.1
-and (not recent[fly] or os.clock()-recent[fly]>=2)
-and (not blocked[fly] or os.clock()>=blocked[fly]) then
-local distance=(fly.Position-root.Position).Magnitude
-if distance<bestDistance and fieldUnder(fly.Position) then best,bestDistance=fly,distance end
-end
-end
-end
-return best
-end
-local function runFireflyGrind(isRunning,setStatus,hop,state)
-local lighting=game:GetService("Lighting")
-local recent,blocked={},{}
-local idleSince,sessionStarted=os.clock(),os.clock()
-local touched=0
-local function active() return isRunning() and not state.hopping and not state.rescuing end
-local function waitFor(seconds)
-local deadline=os.clock()+seconds
-while active() and os.clock()<deadline do task.wait(0.1); state.act=os.clock() end
-end
-while active() do
-state.act=os.clock()
-local night=lighting.ClockTime>=19 or lighting.ClockTime<=5
-local fly=night and findStationaryFirefly(recent,blocked) or nil
-if fly then
-local field=fieldUnder(fly.Position)
-state.busy=true
-setStatus("Fireflies: "..field.Name)
-local ok,reason=pcall(function()
-local function targetAvailable()
-local velocity=fly.Parent and fly:FindFirstChild("BodyVelocity")
-return velocity and velocity.Velocity.Magnitude<=0.1 and fieldUnder(fly.Position)~=nil
-and (lighting.ClockTime>=19 or lighting.ClockTime<=5)
-end
-if not ensureHiveClaimed(active,setStatus,targetAvailable) then error("return",0) end
-if not fireflyTravel or not fireflyCollectStep then error("Firefly farming callbacks are not ready") end
-fireflyTravel(field.Position+Vector3.new(0,3,0),field.Name)
-if not active() or not fly.Parent then return end
-local goal=Vector3.new(fly.Position.X,field.Position.Y+3,fly.Position.Z)
-if not walkMapTo(goal,active,setStatus) then error("return",0) end
-recent[fly]=os.clock()
-touched+=1; idleSince=os.clock()
-state.fireflies=touched
-state.farming=true
-local lootUntil=os.clock()+3
-while active() and os.clock()<lootUntil do
-fireflyCollectStep({loot=true,ignoreprio=true,ignorefield=true,ignoreflower=true,range=35,origin=goal})
-task.wait(0.1); state.act=os.clock()
-end
-end)
-state.busy=false; state.farming=false
-if not ok then
-blocked[fly]=os.clock()+30
-if tostring(reason)~="return" then warn("[TifaHop] Firefly farming: "..tostring(reason)) end
-end
-else
-setStatus(night and "Checking this night server for fireflies" or "Day server; searching for a night server")
-if night or dontHop then waitFor(1) end
-end
-if active() and (not night or os.clock()-idleSince>=4) then
-if dontHop then
-setStatus("Fireflies: staying in this server (DontHop)")
-idleSince=os.clock(); sessionStarted=os.clock()
-else
-setStatus("Fireflies: hopping for a fresh night server")
-state.busy=false; state.farming=false
-hop()
-waitFor(2)
-idleSince=os.clock()
-if active() then waitFor(3) end
-end
-end
-end
-state.busy=false; state.farming=false
 end
 Functions.initialize_automation = function(U, ...)
 local R, argv, V = {}, pack(...), {}
@@ -54036,7 +53966,6 @@ do local result=pack(R[2](unpack(R,3,3))); for i=1,0 do R[2+i-1]=result[i] end e
 R[2] = U[20][1]
 do local result=pack(R[2](unpack(R,3,2))); for i=1,1 do R[2+i-1]=result[i] end end
 R[2] = {R[2]}
-if R[2][1]=="fireflies" then local token=R[0][1]; task.spawn(function() local ok,reason=pcall(function() runFireflyGrind(function() return U[11][1](token) end,U[28][1],U[12][1],U[2][1]) end); U[2][1].busy=false; U[2][1].farming=false; if not ok and tostring(reason)~="return" then warn("[TifaHop] Fireflies: "..tostring(reason)) end end); U[28][1]("Started: Fireflies"); return end -- dedicated worker, no Vicious or group feed
 R[3] = U[2][1]
 R[4] = "em"
 R[5] = R[2][1]
@@ -59398,7 +59327,7 @@ R[56] = R[7][1]
 R[57] = R[53]
 do local result=pack(R[56](unpack(R,57,57))); for i=1,1 do R[56+i-1]=result[i] end end
 R[54][R[55]] = R[56]
-R[54].movement=R[7][1](R[53]); R[54].fireflies=R[7][1](R[53]) -- Fireflies statistics page
+R[54].movement=R[7][1](R[53]);  -- Fireflies statistics page
 R[55] = {}
 R[54] = {R[54]}
 R[55] = {R[55]}
@@ -59763,7 +59692,7 @@ R[64][R[65]] = R[74]
 R[66][R[67]] = R[75]
 R[68][R[69]] = R[76]
 R[70][R[71]] = R[77]
-R[55][1].movement=R[7][1](R[59]); R[12](R[55][1].movement,"Use Red Cannon when walking","cannon"); R[55][1].fireflies=R[7][1](R[59]); R[10](R[54][1].fireflies,"Firefly hop",function() return "Night servers" end); R[10](R[55][1].fireflies,"Farm stationary fireflies",function() return "Use Start above" end)
+R[55][1].movement=R[7][1](R[59]); R[12](R[55][1].movement,"Use Red Cannon when walking","cannon");
 R[60] = R[12]
 R[62] = R[55][1]
 R[63] = "vichop"
@@ -60607,7 +60536,7 @@ R[45] = "planters"
 R[46] = "Plant"
 for i=1,2 do R[44][0+i]=R[44+i] end
 for i=1,6 do R[38][0+i]=R[38+i] end
-table.insert(R[38],3,{"fireflies","Fireflies"}); table.insert(R[38],{"movement","Movement"}) -- genuine GUI farm selection
+table.insert(R[38],{"movement","Movement"}) -- genuine GUI farm selection
 R[39] = env["ipairs"]
 R[40] = R[38]
 do local result=pack(R[39](unpack(R,40,40))); for i=1,3 do R[39+i-1]=result[i] end end
@@ -66359,7 +66288,6 @@ for i=1,1 do R[i-1]=argv[i] end
 local vn=math.max(0,argv.n-1)
 for i=1,vn do V[i]=argv[1+i] end
 local top=0
-if argv[1]=="fireflies" then return "Fireflies" end
 local pc = 1
 while true do
 if pc < 1 or pc > 55 then error("Invalid instruction address in main_0_183_27", 0) end
@@ -68510,7 +68438,6 @@ for i=1,0 do R[i-1]=argv[i] end
 local vn=math.max(0,argv.n-0)
 for i=1,vn do V[i]=argv[0+i] end
 local top=0
-if U[1][1].mode=="fireflies" then return "Fireflies" end
 local pc = 1
 while true do
 if pc < 1 or pc > 40 then error("Invalid instruction address in main_0_183_51", 0) end
@@ -72126,7 +72053,7 @@ R[0] = U[9][1]
 R[1] = "Visible"
 R[3] = U[2][1]
 R[4] = "vichop"
-R[2] = R[3] == R[4] or R[3] == "fireflies" -- shared Start/status card
+R[2] = R[3] == R[4] -- shared Start/status card
 if (not not R[2]) == true then pc = 216 end
 else
 pc = 205

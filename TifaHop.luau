@@ -7485,7 +7485,21 @@ local function ensureHiveClaimed(isRunning,setStatus,hasTarget)
   setStatus("Farm target found; claiming a hive")
   local hives=workspace:FindFirstChild("Honeycombs")
   if not hives then setStatus("Hive locations are not loaded"); return false end
+  local character=player.Character
+  local root=character and character:FindFirstChild("HumanoidRootPart")
+  if not root then return false end
+  local candidates={}
   for _,hive in ipairs(hives:GetChildren()) do
+    local owner=hive:FindFirstChild("Owner")
+    local arrow=hive:FindFirstChild("patharrow")
+    local base=arrow and arrow:FindFirstChild("Base")
+    if owner and owner.Value==nil and base then
+      table.insert(candidates,{hive=hive,distance=(base.Position-root.Position).Magnitude})
+    end
+  end
+  table.sort(candidates,function(a,b) return a.distance<b.distance end)
+  for _,candidate in ipairs(candidates) do
+    local hive=candidate.hive
     if not isRunning() then return false end
     if confirmedHive() then return true end
     local owner=hive:FindFirstChild("Owner")

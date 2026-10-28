@@ -1,50 +1,49 @@
-# TifaHop: separate Walking and Tween scripts
+# TifaHop: three separate scripts
 
-Choose one build and rejoin before switching. Both retain the GUI farm sections, account/group settings and keyless startup. Movement is fixed by the script you load; there is no runtime Walk/Tween toggle.
+Rejoin before switching scripts. Run one at a time.
 
-## Walking build
+## Standalone Fireflies
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/split-v2/loader-walk.luau"))({
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v1/loader-fireflies.luau"))()
+```
+
+Press Start Fireflies. The Movement button switches Walk/Tween and saves the choice. Tween speed defaults to 8, capped at 12. Autodig automatically equips and activates the player's normal tool. To set initial options explicitly, call the backend directly:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v1/TifaHop-Fireflies.luau"))({
+    Movement = "Walk", -- or Tween
+    TweenSpeed = 8,
     WalkSpeedEnabled = true,
     WalkSpeed = 50,
     UseRedCannon = true,
     DontHop = false,
-    MainAccount = "YourMainUsername",
-    Group = "YourSharedRoom",
+    AutoStart = false,
 })
 ```
 
-The Walking build retains the authored A* map routes and Red Cannon profiles, and excludes the Tween engine. Its compact backend is 1,725,190 bytes.
+The standalone backend is about 31 KB and contains no other farm workers, recovered VM or full walking graph. It uses native pathfinding for walking, TweenService for optional tween travel, and a small set of authored Red Cannon profiles. Hive claiming always walks and checks the normal in-range Claim Hive prompt. Pepper Patch walks normally.
 
-## Tween build
+The supplied Atlas source is used as a reference: select nearest stationary NPCBees/Firefly objects, use a two-second revisit delay, and track Sparkles/LeafBurst under workspace.Flowers. This script batches touches of stationary fireflies in the current field before harvesting sparkling flowers and nearby Collectibles. Autodig continues during farming. Sparkle markers are tracked through descendant events rather than repeatedly scanning the entire flower map.
+
+It stays in the same server for the entire night (ClockTime 19:00 through 05:00), including periods without stationary fireflies. At daytime it hops to search for a night server, unless DontHop is on. There is no timed hop during the night. Successful queued execution resumes this standalone script and its selected movement after teleport; executors must support queue_on_teleport or its equivalents for automatic resume. Visited-server history is carried between hops. Day/night status is checked after joining, not known in advance.
+
+Options save to TifaHop/fireflies_<UserId>.json. Start/Stop and movement selection are independent of all other TifaHop scripts.
+
+## Walking build: other farms
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/split-v2/loader-tween.luau"))({
-    TweenSpeed = 8,
-    UseRedCannon = true,
-    DontHop = false,
-    MainAccount = "YourMainUsername",
-    Group = "YourSharedRoom",
-})
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v1/loader-walk.luau"))()
 ```
 
-The Tween build excludes the full authored walking graph and A* planner. It retains only 21 cannon destination coordinates/profiles and uses Roblox PathfindingService for physically walking to hives/cannon and Pepper Patch. Its compact backend is 1,342,095 bytes. Tween speed defaults to 8 and is capped at 12.
+## Tween build: other farms
 
-Both loaders fetch only their selected backend. Generated indentation, standalone comments and unreachable function definitions are removed. All farm/UI features are retained; these are smaller builds, not claims of measured live CPU or memory improvements.
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v1/loader-tween.luau"))()
+```
 
-## Fireflies
+Fireflies has been removed from both builds: no Fireflies tab, worker, hop dispatch or standalone helper engine is included. Other farm choices persist in TifaHop/farm_<UserId>.txt. Walking retains authored A* routes; Tween excludes the full route graph. Each loader fetches only its selected backend.
 
-Select Fireflies in the GUI, then Start. This runs independently of the Vicious Bee worker and group feed. Day servers hop immediately. Night servers get a four-second check for usable stationary fireflies before hopping. Found targets trigger hive claiming and farming. Empty/day servers do not claim hives. If a teleport fails without leaving the server, the worker retries instead of returning permanently. DontHop explicitly disables these hops.
+All three scripts sort available hives by distance and try the nearest first, rechecking ownership before interaction. If the nearest is unreachable or becomes occupied, the next nearest is attempted. No hive is claimed on empty/day servers by Fireflies.
 
-The server hopper searches successive servers; it cannot know a server's day/night state before joining. No night destination is guaranteed.
-
-## Movement and interaction
-
-Hive claiming always walks to a vacant hive and requires the visible Claim Hive prompt before pressing E. Inter-field travel prefers a committed Red Cannon launch when enabled; Pepper Patch walks normally, and short local travel avoids cannon trips. Launch profiles steer toward the requested destination. Combat stays on the ground and avoids visible warning disks/spikes.
-
-Compilation and mocked regression tests pass. Live-game traversal, glide landing accuracy and attack recognition remain unverified. The original remote HTTP/relay services remain dependencies. The combined TifaHop.luau is retained for build maintenance; the two loaders do not download it.
-
-## Persistent farm selection
-
-Explicit GUI farm choices save immediately to TifaHop/farm_<UserId>.txt and restore across script reloads and server hops, even when loader defaults are supplied. Startup recognizes Fireflies as valid. The chosen farm takes precedence over the former automatic Mondo override, and opening Main/Movement does not select another farm. Switching farm sections stops the current farm before saving the new choice; Start runs that selected farm.
+Compilation and mocked tests pass. Live-game traversal, sparkle harvesting, cannon landing and executor teleport resume remain unverified.
