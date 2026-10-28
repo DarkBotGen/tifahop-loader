@@ -7561,10 +7561,10 @@ local function runFireflyGrind(isRunning,setStatus,hop,state)
         if tostring(reason)~="return" then warn("[TifaHop] Firefly farming: "..tostring(reason)) end
       end
     else
-      setStatus(night and "Looking for stationary fireflies" or "Waiting for a night server")
-      waitFor(1)
+      setStatus(night and "Checking this night server for fireflies" or "Day server; searching for a night server")
+      if night or dontHop then waitFor(1) end
     end
-    if active() and (os.clock()-idleSince>=20 or os.clock()-sessionStarted>=180) then
+    if active() and (not night or os.clock()-idleSince>=4) then
       if dontHop then
         setStatus("Fireflies: staying in this server (DontHop)")
         idleSince=os.clock(); sessionStarted=os.clock()
@@ -7573,7 +7573,9 @@ local function runFireflyGrind(isRunning,setStatus,hop,state)
         state.busy=false; state.farming=false
         hop()
         waitFor(2)
-        return
+        -- A failed teleport must not leave this farm permanently idle.
+        idleSince=os.clock()
+        if active() then waitFor(3) end
       end
     end
   end
