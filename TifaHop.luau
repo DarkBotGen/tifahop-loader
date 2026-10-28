@@ -7337,10 +7337,17 @@ local function confirmedHive()
   if spawn and spawn.Value and spawn.Value.Position.Y<0 then return nil end
   return owned
 end
-local function ensureHiveClaimed(isRunning,setStatus)
+local function farmTargetPresent(target)
+  if not target or not target.Parent then return false end
+  local humanoid=target.FindFirstChildOfClass and target:FindFirstChildOfClass("Humanoid")
+  return not humanoid or humanoid.Health>0
+end
+local function ensureHiveClaimed(isRunning,setStatus,hasTarget)
+  local running=isRunning
+  isRunning=function() return running() and type(hasTarget)=="function" and hasTarget() end
   if not isRunning() then return false end
   if confirmedHive() then return true end
-  setStatus("Claiming hive before "..(farmMode=="Fireflies" and "Firefly farming" or "Vicious Bee"))
+  setStatus("Farm target found; claiming a hive")
   local hives=workspace:FindFirstChild("Honeycombs")
   if not hives then setStatus("Hive locations are not loaded"); return false end
   for _,hive in ipairs(hives:GetChildren()) do
@@ -7414,6 +7421,12 @@ local function runFireflyGrind(isRunning,setStatus,hop,state)
       state.busy=true
       setStatus("Fireflies: "..field.Name)
       local ok,reason=pcall(function()
+        local function targetAvailable()
+          local velocity=fly.Parent and fly:FindFirstChild("BodyVelocity")
+          return velocity and velocity.Velocity.Magnitude<=0.1 and fieldUnder(fly.Position)~=nil
+            and (lighting.ClockTime>=19 or lighting.ClockTime<=5)
+        end
+        if not ensureHiveClaimed(active,setStatus,targetAvailable) then error("return",0) end
         if not fireflyTravel or not fireflyCollectStep then error("Firefly farming callbacks are not ready") end
         fireflyTravel(field.Position+Vector3.new(0,3,0),field.Name)
         if not active() or not fly.Parent then return end
@@ -42128,7 +42141,6 @@ Functions.main_0_128 = function(U, ...)
   local vn=math.max(0,argv.n-1)
   for i=1,vn do V[i]=argv[1+i] end
   local top=0
-  if not ensureHiveClaimed(function() return U[5][1](argv[1]) end, U[1][1]) then return end -- claim before Vicious search
   if farmMode=="Fireflies" then return runFireflyGrind(function() return U[5][1](argv[1]) end,U[1][1],U[10][1],U[6][1]) end
   local pc = 1
   while true do
@@ -48409,6 +48421,7 @@ Functions.main_0_150 = function(U, ...)
   local vn=math.max(0,argv.n-4)
   for i=1,vn do V[i]=argv[4+i] end
   local top=0
+  if not ensureHiveClaimed(function() return U[15][1](argv[2]) end,U[5][1],function() return farmTargetPresent(argv[1]) end) then return end -- selected target only
   local pc = 1
   while true do
     if pc < 1 or pc > 725 then error("Invalid instruction address in main_0_150", 0) end
@@ -51662,6 +51675,7 @@ Functions.main_0_157 = function(U, ...)
   local vn=math.max(0,argv.n-2)
   for i=1,vn do V[i]=argv[2+i] end
   local top=0
+  if not ensureHiveClaimed(function() return U[2][1](argv[2]) end,U[3][1],function() return farmTargetPresent(argv[1]) end) then return end -- selected target only
   local pc = 1
   while true do
     if pc < 1 or pc > 479 then error("Invalid instruction address in main_0_157", 0) end
@@ -54871,6 +54885,7 @@ Functions.main_0_159 = function(U, ...)
   local vn=math.max(0,argv.n-2)
   for i=1,vn do V[i]=argv[2+i] end
   local top=0
+  if not ensureHiveClaimed(function() return U[4][1](argv[2]) end,U[11][1],function() return farmTargetPresent(argv[1]) end) then return end -- selected target only
   local pc = 1
   while true do
     if pc < 1 or pc > 227 then error("Invalid instruction address in main_0_159", 0) end
@@ -81137,8 +81152,9 @@ Functions.main_0_37=function(_upvalues,position)
   if not walkPosition(position,normalRunning,normalStatus) then error("return",0) end
 end
 Functions.main_0_51=function(U)
-  local status=U[5] and U[5][1] or normalStatus
-  return ensureHiveClaimed(normalRunning,status)
+  if confirmedHive() then return true end
+  normalStatus("Hive claim deferred until a farm target is selected")
+  return false -- generic/legacy calls must not claim while merely searching
 end
 local function activateEquippedTool()
   local character=player.Character
@@ -81172,11 +81188,11 @@ Functions.main_0_126=function(U,target,token)
   local state=U[11][1]
   local function running() return U[6][1](token) end
   local status=U[4][1]
-  if not ensureHiveClaimed(running,status) then return end
   if U[1][1]() then return end -- scouts continue reporting through their normal worker
   local monsterRoot=target and target:FindFirstChild("HumanoidRootPart")
   local monsterHumanoid=target and target:FindFirstChildOfClass("Humanoid")
   if not monsterRoot then return end
+  if not ensureHiveClaimed(running,status,function() return farmTargetPresent(target) and monsterRoot.Parent~=nil end) then return end
   local function alive()
     local character=player.Character
     local humanoid=character and character:FindFirstChildOfClass("Humanoid")
