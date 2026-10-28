@@ -10,3 +10,6 @@
 Tests mock Roblox services. Live gameplay and executor teleport resume are not established by these checks.
 
 - Standalone repair tests verify editable/saved speed values and invalid-input handling; original tween scale (100 studs at setting 8 takes 1.25 seconds); cancellation; selected movement for cannon access versus forced walking for hives; strict field bounds; rejection of disabled/unrelated sparkles, unvisited locations, false arrival and targets moving before contact. These remain mocked checks, not successful live-game verification.
+
+- fireflies-v3 tests verify continuous waypoint merging, preserved jump execution, bounded replanning and Stop cancellation; off-target inter-field arrival followed by forced walking contact; no cannon scheduling in Tween; local forced walking; rejection of pre-existing, ability, foreign-source, distant and expired tokens; main/alt role selection; room/place/night/freshness report validation; relay wire protocol; and scout departure after the main arrives.
+- Transport checks were read-only: former relay returned HTTP 403; ntfy.sh polling returned HTTP 200. No group report was published in these checks. Cross-account discovery/teleport behavior remains mocked rather than live-verified.
