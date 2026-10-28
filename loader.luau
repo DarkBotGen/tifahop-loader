@@ -3,12 +3,12 @@ local Config = ... or {
     MinViciousLevel = 1,
     MaxViciousLevel = 12,
     DontHop = false,
-    ViciousMovement = "Walk", -- "Walk" or "Tween" for the Vicious approach.
+    ViciousMovement = "Walk", -- "Walk" uses map routes; "Tween" restores flying.
     MainAccount = "", -- Roblox username; matching account becomes main.
     Group = "",       -- Shared TifaHop room; empty disables grouping.
 }
 
-local source = game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/movement-v1/TifaHop.luau")
+local source = game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/routes-v1/TifaHop.luau")
 local run, reason = loadstring(source, "@TifaHop")
 assert(run, "[TifaHop] Compilation failed: " .. tostring(reason))
 -- Cache the backend for the script's existing rejoin/teleport bootstrap.

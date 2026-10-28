@@ -20,7 +20,7 @@ local Config = {
 Or launch the hosted loader directly with those same controls:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/movement-v1/loader.luau"))({
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/routes-v1/loader.luau"))({
     MinViciousLevel = 1,
     MaxViciousLevel = 12,
     DontHop = false,
@@ -32,7 +32,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-lo
 
 - Vicious levels are inclusive integers from 1 to 12; minimum cannot exceed maximum.
 - `DontHop = true` sets the original script's no-hop setting. Its separate error/rejoin recovery still exists.
-- `ViciousMovement` selects `"Walk"` (pathfinding) or `"Tween"` (original flying movement) for the approach to Vicious Bees. Default is `"Walk"`. The selection is saved for rejoin recovery. Change the loader value and rejoin to switch an already running session.
+- `ViciousMovement` selects `"Walk"` (map routes) or `"Tween"` (original flying movement). It also sets the initial general movement selector, so field travel uses the new walking router in Walk mode. Default is `"Walk"`. The selection is saved for rejoin recovery. Change the loader value and rejoin to switch an already running session.
 - `MainAccount` is the Roblox **username**, not display name. Matching is case-insensitive. The matching account is main; other accounts using the same group are alts.
 - Use the same `MainAccount` and `Group` on every participating account. A nonempty group requires a main username.
 - Empty `Group` disables grouped roles. Group is this script's shared coordination room, not a Roblox group ID. Room names are not authenticated access controls.
@@ -43,9 +43,11 @@ The requested controls override the old saved settings at startup. Other feature
 
 ## Walking to Vicious Bees
 
-With `ViciousMovement = "Walk"`, the `movement-v1` build approaches Vicious Bees on foot using PathfindingService waypoints and Humanoid walking. It follows jump waypoints and recomputes the path when blocked, stalled, or when the target moves. Stop/cancellation, character death and disappearing targets interrupt navigation, and event connections are cleaned up. `ViciousMovement = "Tween"` restores the original approach callback.
+The `routes-v1` build uses an Atlas-style map graph extracted from the user-provided reference: 3,439 coordinates and 22,048 walk/jump links. A* selects a route through these known map connections. The same router replaces the recovered general walking callback, which previously aborted immediately. Special cannon, portal, reset and glider links are excluded; this router does not activate those mechanics.
 
-Unreachable targets produce a status message and abort the approach; navigation does not fall back to flying. Total navigation time and failed route attempts are bounded. Combat positioning, including the existing fighting platform, stays as before after arrival. The general movement selector still applies to other features; this override applies specifically to the Vicious approach.
+Vicious navigation first locates the containing field, routes to it, then walks on the ground below the bee. Arrival uses horizontal distance with a vertical safety bound, so a floating Vicious root is not treated as a ground-level walking destination. Jump links and elevation changes trigger normal humanoid jumps. Blocked links are excluded during bounded replanning. Stop/cancellation, character death and disappearing targets interrupt navigation. `ViciousMovement = "Tween"` restores the original approach callback.
+
+Unreachable targets produce a status message and abort the approach; navigation does not fall back to flying. Total navigation time and failed route attempts are bounded. Combat positioning, including the existing fighting platform, stays as before after arrival. General field travel now uses the same map router when its movement selector is Walk. Other explicitly scripted combat/interaction movements are retained.
 
 If an earlier version is already running, rejoin before using this release. The duplicate-start guard prevents a second running copy from replacing it in the same server.
 
