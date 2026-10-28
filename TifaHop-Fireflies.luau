@@ -13,6 +13,7 @@ if options==nil and readfile and isfile and isfile(configPath) then
 end
 options=options or {}
 local config={WalkSpeedEnabled=options.WalkSpeedEnabled~=false,WalkSpeed=math.clamp(tonumber(options.WalkSpeed) or 50,1,100),UseRedCannon=options.UseRedCannon~=false,DontHop=options.DontHop==true,AutoStart=options.AutoStart==true,Movement=options.Movement=="Tween" and "Tween" or "Walk",TweenSpeed=math.clamp(tonumber(options.TweenSpeed) or 8,4,12)}
+config.AutoDig=options.AutoDig~=false
 config.Group=type(options.Group)=="string" and options.Group:match("^%s*(.-)%s*$") or ""
 config.MainAccount=type(options.MainAccount)=="string" and options.MainAccount:match("^%s*(.-)%s*$") or ""
 config.RelayURL=type(options.RelayURL)=="string" and options.RelayURL or "https://ntfy.sh"
@@ -106,14 +107,14 @@ local redCannonProfiles = {
   ["Treat Dispenser"]={Node=1792,Delay=1.6,Flight=2.3,Glide=true,OffsetZ=0},
 }
 -- Atlas-style map routing: authored inter-field routes and grounded final legs.
-local redCannonReady, travelRedCannon, preferredCannonTravel
+local redCannonReady, travelRedCannon, preferredCannonTravel, shouldUseCannon
 local fieldUnder
 local function horizontalDistance(a,b)
   return Vector3.new(a.X-b.X,0,a.Z-b.Z).Magnitude
 end
 local function routeFilter()
   local include={}
-  for _,name in ipairs({"Map","Gates"}) do
+  for _,name in ipairs({"Map","Gates","Decorations","Leaderboards"}) do
     local object=workspace:FindFirstChild(name)
     if object then table.insert(include,object) end
   end
@@ -125,7 +126,7 @@ local function routeFilter()
   return params
 end
 local function connectorClear(from,to,params)
-  return workspace:Raycast(from+Vector3.new(0,1,0),to-from,params)==nil
+  return workspace:Raycast(from,to-from,params)==nil
 end
 local routeLinks,redCannonLinks
 local routeLoadFailed=false
@@ -139,7 +140,7 @@ local function loadWalkRoutes(setStatus)
   local text
   if isfile and readfile and isfile(path) then text=readfile(path) end
   if not text then
-   text=game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v4/Firefly-WalkRoutes.luau")
+   text=game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v5/Firefly-WalkRoutes.luau")
    if writefile then pcall(writefile,path,text) end
   end
   local compile=loadstring(text,"@TifaHopWalkRoutes")
@@ -151,13 +152,13 @@ local function loadWalkRoutes(setStatus)
  if shared then shared.TifaHopFireflyWalkRoutesV4=packet end
  return true
 end
-local function findMapRoute(from,to,excludedEdges,excludedStarts,isRunning,allowCannon)
+local function calculateMapRoute(from,to,excludedEdges,excludedStarts,isRunning,allowCannon)
   local params=routeFilter()
-  local start,goal,startDistance,goalDistance=nil,nil,100,100
+  local start,goal,startDistance,goalDistance=nil,nil,100,math.huge
   for id,position in pairs(routeNodes) do
     local a,b=(position-from).Magnitude,(position-to).Magnitude
     if a<startDistance and not excludedStarts[id] and connectorClear(from,position,params) then start,startDistance=id,a end
-    if b<goalDistance and connectorClear(position,to,params) then goal,goalDistance=id,b end
+    if b<goalDistance then goal,goalDistance=id,b end
   end
   if not start or not goal then return nil,"No nearby map-route connector" end
   local heap={}
@@ -194,7 +195,7 @@ local function findMapRoute(from,to,excludedEdges,excludedStarts,isRunning,allow
     if not closed[current] then
       if current==goal then
         local reverse={}; local id=goal
-        while id do
+        while parent[id] do
           table.insert(reverse,{Position=routeNodes[id],Label=labels[id] or "",Node=id,From=parent[id]})
           id=parent[id]
         end
@@ -229,6 +230,128 @@ local function findMapRoute(from,to,excludedEdges,excludedStarts,isRunning,allow
   end
   return nil,"No connected walking route"
 end
+local routeCache={}
+local function findMapRoute(from,to,excludedEdges,excludedStarts,isRunning,allowCannon)
+ local cacheable=allowCannon==false and next(excludedEdges)==nil and next(excludedStarts)==nil
+ if cacheable then
+  for _,entry in ipairs(routeCache) do
+   if (entry.from-from).Magnitude<1 and (entry.to-to).Magnitude<1 then return entry.path end
+  end
+ end
+ local path,reason=calculateMapRoute(from,to,excludedEdges,excludedStarts,isRunning,allowCannon)
+ if cacheable and path then
+  table.insert(routeCache,{from=from,to=to,path=path});if #routeCache>4 then table.remove(routeCache,1) end
+ end
+ return path,reason
+end
+local function routeWalkingSeconds(from,path,speed)
+ local distance,delay=0,0
+ local previous=from
+ for _,point in ipairs(path) do
+  distance+=(point.Position-previous).Magnitude;previous=point.Position
+  local label=point.Label
+  if label=="Drop" then delay+=0.5 elseif label=="Wait" then delay+=0.6 elseif label=="Night" then delay+=1 end
+ end
+ return distance/math.max(speed,1)+delay
+end
+shouldUseCannon=function(from,destination,isRunning,setStatus)
+ if config.Movement~="Walk" or not useRedCannon or not redCannonReady or not redCannonReady() then return false end
+ local same=fieldUnder(from)
+ if same and same==fieldUnder(destination) then return false end
+ if horizontalDistance(from,destination)<160 and math.abs(from.Y-destination.Y)<15 then return false end
+ if not loadWalkRoutes(setStatus) or not isRunning() then return false end
+ local walking=findMapRoute(from,destination,{},{},isRunning,false)
+ if not walking then return true end
+ local toys=workspace:FindFirstChild("Toys")
+ local cannon=toys and toys:FindFirstChild("Red Cannon")
+ local platform=cannon and cannon:FindFirstChild("Platform")
+ if not platform then return false end
+ local approach=findMapRoute(from,platform.Position,{},{},isRunning,false)
+ if not approach then return false end
+ local character=player.Character
+ local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+ local speed=humanoid and humanoid.WalkSpeed or 16
+ local walkTime=routeWalkingSeconds(from,walking,speed)
+ local chosen,nearest=nil,math.huge
+ local field=fieldUnder(destination)
+ for name,profile in pairs(redCannonProfiles) do
+  local landing=routeNodes[profile.Node]
+  if landing then
+   if field and name==field.Name then chosen=profile;break end
+   local distance=(landing-destination).Magnitude
+   if distance<nearest then chosen,nearest=profile,distance end
+  end
+ end
+ if not chosen then return false end
+ local landing=routeNodes[chosen.Node]
+ local tail=findMapRoute(landing,destination,{},{},isRunning,false)
+ if not tail then return false end
+ local best=chosen.Delay+chosen.Flight+1.5+routeWalkingSeconds(landing,tail,speed)
+ local cannonTime=routeWalkingSeconds(from,approach,speed)+best
+ return cannonTime+1.5<walkTime
+end
+-- Atlas travel semantics: visit authored corners in order and dispatch labels.
+local function followAtlasRoute(points,destination,isRunning,humanoid,root,character,setStatus)
+ local heartbeat=game:GetService("RunService").Heartbeat
+ local function active() return isRunning() and player.Character==character and root.Parent and humanoid.Health>0 end
+ local function pause(seconds)
+  local deadline=os.clock()+seconds
+  while active() and os.clock()<deadline do heartbeat:Wait() end
+  return active()
+ end
+ local function settle(limit)
+  local deadline=os.clock()+limit
+  while active() and humanoid.FloorMaterial==Enum.Material.Air and os.clock()<deadline do heartbeat:Wait() end
+  return active()
+ end
+ for index,point in ipairs(points) do
+  if not active() then return false,index end
+  local label=point.Label or ""
+  local position=point.Position
+  if label=="Drop" then
+   local deadline=os.clock()+0.5
+   while active() and os.clock()<deadline do heartbeat:Wait() end
+   if not settle(4) then return false,index end
+  elseif label=="Wait" then
+   if not pause(0.2) then return false,index end
+   humanoid:MoveTo(position)
+   if not pause(0.2) then return false,index end
+   humanoid:MoveTo(position+Vector3.new(0,0,2))
+   if not pause(0.2) then return false,index end
+   continue
+  elseif label=="Night" then
+   if not pause(0.25) then return false,index end
+   humanoid.Jump=true;humanoid:MoveTo(position)
+   if not pause(1) then return false,index end
+   continue
+  elseif label=="Jump" or label=="Jump1" or label=="CoconutJump" or label=="MultiJump" then
+   if label=="Jump1" and humanoid.WalkSpeed>55 and not pause(0.1) then return false,index end
+   if not settle(4) then return false,index end
+   if horizontalDistance(root.Position,position)>4 or math.abs(root.Position.Y-position.Y)>2 then humanoid.Jump=true end
+  elseif label~="" then
+   setStatus("Unsupported walking link: "..label)
+   return false,index
+  end
+  local range=index==#points and 2 or 4
+  local began,lastMove,lastProgress,lastPosition=os.clock(),os.clock(),os.clock(),root.Position
+  local best=horizontalDistance(root.Position,position)
+  humanoid:MoveTo(position)
+  while active() and (horizontalDistance(root.Position,position)>range or math.abs(root.Position.Y-position.Y)>6) do
+   heartbeat:Wait()
+   local distance=horizontalDistance(root.Position,position)
+   if (root.Position-lastPosition).Magnitude>0.1 then lastProgress=os.clock();lastPosition=root.Position end
+   if os.clock()-lastProgress>0.75 then return false,index end
+   if os.clock()-began>math.max(5,best/math.max(humanoid.WalkSpeed,1)*3+3) then return false,index end
+   if os.clock()-lastMove>2 then humanoid:MoveTo(position);lastMove=os.clock() end
+   if label=="MultiJump" or label=="CoconutJump" then
+    if math.abs(root.Position.Y-position.Y)>2 and humanoid.FloorMaterial~=Enum.Material.Air then humanoid.Jump=true end
+   end
+  end
+  if not active() then return false,index end
+ end
+ return active() and horizontalDistance(root.Position,destination)<=3 and math.abs(root.Position.Y-destination.Y)<=7
+end
+
 local function tweenMapTo(destination,isRunning,setStatus)
   local character=player.Character
   local humanoid=character and character:FindFirstChildOfClass("Humanoid")
@@ -264,7 +387,7 @@ local function walkMapTo(destination,isRunning,setStatus,allowCannon,forceWalk)
  if not active() then return false end
  refreshWalkingSpeed()
  if (root.Position-destination).Magnitude<=3 then return true end
- if config.Movement=="Walk" and allowCannon~=false and useRedCannon and preferredCannonTravel then
+ if config.Movement=="Walk" and allowCannon~=false and useRedCannon and preferredCannonTravel and shouldUseCannon and shouldUseCannon(root.Position,destination,active,setStatus) then
   local handled,result=preferredCannonTravel(destination,active,setStatus)
   if handled then return result end
  end
@@ -352,13 +475,8 @@ local function walkMapTo(destination,isRunning,setStatus,allowCannon,forceWalk)
    if not active() then break end
    local path=findMapRoute(root.Position,destination,excludedEdges,excludedStarts,active,false)
    if not path then break end
-   for i,point in ipairs(path) do
-    local previous=path[math.max(i-1,1)].Position
-    local jump=point.Label:find("Jump",1,true) and point.Position.Y-previous.Y>2.5
-    point.Action=jump and Enum.PathWaypointAction.Jump or Enum.PathWaypointAction.Walk
-   end
    setStatus("Following Atlas walking route")
-   local arrived,failedIndex=follow(path)
+   local arrived,failedIndex=followAtlasRoute(path,destination,active,humanoid,root,character,setStatus)
    if arrived then return true end
    local failed=path[failedIndex or 1]
    if failed and failed.From and failed.Node then excludedEdges[failed.From..":"..failed.Node]=true
@@ -651,10 +769,28 @@ local function nightTime()
  local time=game:GetService("Lighting").ClockTime
  return time>=19 or time<=5
 end
+local localCollect,nextCollectorTry=nil,-math.huge
 local function dig()
+ if config and config.AutoDig==false then return false end
  local character=player.Character
  local humanoid=character and character:FindFirstChildOfClass("Humanoid")
  if not humanoid or humanoid.Health<=0 then return false end
+ if not localCollect and os.clock()>=nextCollectorTry then
+  nextCollectorTry=os.clock()+5
+  local ok,module=pcall(function()
+   local storage=game:GetService("ReplicatedStorage")
+   local collectors=storage:FindFirstChild("Collectors")
+   local source=collectors and collectors:FindFirstChild("LocalCollect")
+   if not source then return nil end
+   return require(source)
+  end)
+  if ok and type(module)=="table" and type(module.Run)=="function" then localCollect=module.Run end
+ end
+ if localCollect then
+  local ok=pcall(localCollect)
+  if ok then return true end
+  localCollect=nil
+ end
  local tool=character:FindFirstChildOfClass("Tool")
  if not tool then
   local backpack=player:FindFirstChild("Backpack")
@@ -670,29 +806,62 @@ local collectibles=workspace:FindFirstChild("Collectibles")
 local dropAdded
 if collectibles then dropAdded=collectibles.ChildAdded:Connect(function(token)
  if token:IsA("BasePart") then freshTokens[token]=os.clock() end
-end) end
+end)
+ for _,token in ipairs(collectibles:GetChildren()) do
+  if token:IsA("BasePart") and freshTokens[token]==nil then freshTokens[token]=-math.huge end
+ end
+end
 local function markFireflyDropWindow(position,field)
  local fresh={}
  for _,window in ipairs(dropWindows) do if os.clock()<=window.expiresAt then table.insert(fresh,window) end end
  table.insert(fresh,{position=position,field=field,from=os.clock()-0.35,untilTime=os.clock()+6,expiresAt=os.clock()+75})
  dropWindows=fresh
 end
+local function markFireflyCluster(field,anchor)
+ local folder=workspace:FindFirstChild("NPCBees")
+ local total,count=Vector3.new(0,0,0),0
+ if not folder then return end
+ for _,fly in ipairs(folder:GetChildren()) do
+  local velocity=fly.Name=="Firefly" and fly:FindFirstChild("BodyVelocity")
+  if velocity and velocity.Velocity.Magnitude==0 and fieldUnder(fly.Position)==field and horizontalDistance(fly.Position,anchor)<=35 then total+=fly.Position;count+=1 end
+ end
+ if count>=3 then
+  local centre=total/count
+  centre=Vector3.new(centre.X,field.Position.Y+3,centre.Z)
+  local fresh={}
+  local retained=false
+  for _,window in ipairs(dropWindows) do
+   if os.clock()<=window.expiresAt then
+    if window.kind=="cluster" and window.field==field and horizontalDistance(window.position,centre)<=20 then
+     if (window.count or 0)>=count then
+      window.untilTime=os.clock()+8;window.expiresAt=os.clock()+75;table.insert(fresh,window);retained=true
+     end
+    else table.insert(fresh,window) end
+   end
+  end
+  if not retained then table.insert(fresh,{kind="cluster",count=count,position=centre,field=field,from=os.clock()-75,untilTime=os.clock()+8,expiresAt=os.clock()+75}) end
+  dropWindows=fresh
+ end
+end
 local fireflyLootIcons={["2306224708"]=true,["1472135114"]=true,["2028574353"]=true}
 local function isFireflyDrop(token)
  local born=freshTokens[token]
- if not born then return false end -- never sweep up pre-existing field tokens
+ local context,central=false,false
+ for _,window in ipairs(dropWindows) do
+  if os.clock()<=window.expiresAt and horizontalDistance(token.Position,window.position)<=12 and math.abs(token.Position.Y-window.position.Y)<=8 then
+   local centre=window.kind=="cluster" and horizontalDistance(token.Position,window.position)<=6
+   local associated=born and born>=window.from and born<=window.untilTime
+   if (associated or centre) and fieldUnder(token.Position)==window.field then context=true;central=central or centre end
+  end
+ end
+ if not context then return false end
  local source=token:GetAttribute("Source") or token:GetAttribute("SpawnSource")
  local explicit=type(source)=="string" and source:lower():find("firefly",1,true)~=nil
  if source and not explicit then return false end
- if not explicit then
-  local decal=token:FindFirstChildWhichIsA("Decal")
-  local id=decal and tostring(decal.Texture):match("(%d+)$")
-  if not fireflyLootIcons[id] then return false end
- end
- for _,window in ipairs(dropWindows) do
-  if born>=window.from and born<=window.untilTime and os.clock()<=window.expiresAt and
-    horizontalDistance(token.Position,window.position)<=12 and math.abs(token.Position.Y-window.position.Y)<=8 and fieldUnder(token.Position)==window.field then return true end
- end
+ local decal=token:FindFirstChildWhichIsA("Decal")
+ if decal and decal.Transparency and decal.Transparency>=0.95 then return false end
+ local id=decal and tostring(decal.Texture):match("(%d+)$")
+ if explicit or fireflyLootIcons[id] or central then return true,central or id=="1629547638" end
  return false
 end
 local function collectNearby(origin,isRunning,recentTokens)
@@ -700,11 +869,13 @@ local function collectNearby(origin,isRunning,recentTokens)
  local root=character and character:FindFirstChild("HumanoidRootPart")
  local folder=workspace:FindFirstChild("Collectibles")
  if not root or not folder then return false end
- local nearest,distance=nil,35
+ local nearest,distance=nil,math.huge
  for _,token in ipairs(folder:GetChildren()) do
-  if token:IsA("BasePart") and token.Transparency<0.95 and isFireflyDrop(token) and (token.Position-origin).Magnitude<=35 and
+  local eligible,central=false,false
+  if token:IsA("BasePart") then eligible,central=isFireflyDrop(token) end
+  if token:IsA("BasePart") and token.Parent and eligible and (token.Position-origin).Magnitude<=45 and
    (not recentTokens[token] or os.clock()-recentTokens[token]>2) then
-   local d=(token.Position-root.Position).Magnitude
+   local d=(token.Position-root.Position).Magnitude-(central and 50 or 0)
    if d<distance then nearest,distance=token,d end
   end
  end
@@ -712,13 +883,23 @@ local function collectNearby(origin,isRunning,recentTokens)
   local field=fieldUnder(nearest.Position)
   if field then
    local goal=Vector3.new(nearest.Position.X,field.Position.Y+3,nearest.Position.Z)
-   local arrived=walkMapTo(goal,function() return isRunning() and nearest.Parent~=nil end,setStatus,false,true)
+   local valid=function() return isRunning() and nearest.Parent~=nil end
+   if horizontalDistance(root.Position,goal)>10 and not walkMapTo(goal,valid,setStatus,false,true) then return false end
+   local humanoid=character:FindFirstChildOfClass("Humanoid")
+   if not humanoid then return false end
+   -- Atlas collectToken keeps moving onto the actual token instead of stopping at route tolerance.
+   humanoid:MoveTo(goal)
+   local deadline=os.clock()+math.max(1,horizontalDistance(root.Position,goal)/math.max(humanoid.WalkSpeed,1)+1)
+   while valid() and horizontalDistance(root.Position,goal)>1.2 and os.clock()<deadline do game:GetService("RunService").Heartbeat:Wait() end
+   if not isRunning() then return false end
+   game:GetService("RunService").Heartbeat:Wait()
    recentTokens[nearest]=os.clock()
-   return arrived and horizontalDistance(root.Position,nearest.Position)<=8
+   return not nearest.Parent or horizontalDistance(root.Position,goal)<=1.5
   end
  end
 end
 local sparkleTargets={}
+local sparkleRetry=setmetatable({},{__mode="k"})
 local touchedFields={}
 local function recentlyTouched(field,position)
  for _,touch in ipairs(touchedFields[field] or {}) do
@@ -740,13 +921,14 @@ if flowers then
  sparkleRemoved=flowers.DescendantRemoving:Connect(function(marker) sparkleTargets[marker]=nil end)
 end
 local function farmSparkle(field,isRunning,recent)
+ if config and config.AutoDig==false then return false end
  local character=player.Character
  local root=character and character:FindFirstChild("HumanoidRootPart")
  if not root then return false end
  local nearest,nearestMarker,distance=nil,nil,math.huge
  for marker,flower in pairs(sparkleTargets) do
   if not marker.Parent or not flower.Parent then sparkleTargets[marker]=nil
-  elseif marker.Enabled~=false and not recent[marker] and fieldUnder(flower.Position)==field and recentlyTouched(field,flower.Position) then
+  elseif marker.Enabled~=false and not recent[marker] and (not sparkleRetry[marker] or os.clock()>=sparkleRetry[marker]) and fieldUnder(flower.Position)==field and recentlyTouched(field,flower.Position) then
    local d=(flower.Position-root.Position).Magnitude
    if d<distance then nearest,nearestMarker,distance=flower,marker,d end
   end
@@ -762,14 +944,21 @@ local function farmSparkle(field,isRunning,recent)
   markFireflyDropWindow(goal,field)
   setStatus("Farming firefly sparkles in "..field.Name.." | autodig on")
   harvestDigging=true
-  local untilTime=os.clock()+0.65
+  local knownBefore={}
+  for token in pairs(freshTokens) do knownBefore[token]=true end
+  local untilTime=os.clock()+2
   while isRunning() and nearestMarker.Parent and nearestMarker.Enabled~=false and os.clock()<untilTime do
-   local ok,activated=pcall(dig)
-   if ok and activated then triggered=true;break end
-   task.wait()
+   pcall(dig)
+   if not nearestMarker.Parent or nearestMarker.Enabled==false then triggered=true;break end
+   for token in pairs(freshTokens) do
+    if not knownBefore[token] and token.Parent and horizontalDistance(token.Position,goal)<=8 and isFireflyDrop(token) then triggered=true;break end
+   end
+   if triggered then break end
+   task.wait(0.12)
   end
   harvestDigging=false
-  if triggered then task.wait(0.1) end
+  triggered=triggered or not nearestMarker.Parent or nearestMarker.Enabled==false
+  if not triggered and isRunning() then sparkleRetry[nearestMarker]=os.clock()+4;setStatus("Collector did not finish this sparkle; trying another target") end
  end
  if triggered then recent[nearestMarker]=true end
  return arrived and triggered
@@ -780,7 +969,7 @@ local function nextHarvestField(recentSparkles)
  if not root then return nil end
  local nearest,best=nil,math.huge
  for marker,flower in pairs(sparkleTargets) do
-  if marker.Parent and marker.Enabled~=false and flower.Parent and not recentSparkles[marker] then
+  if (not config or config.AutoDig~=false) and marker.Parent and marker.Enabled~=false and flower.Parent and not recentSparkles[marker] and (not sparkleRetry[marker] or os.clock()>=sparkleRetry[marker]) then
    local field=fieldUnder(flower.Position)
    if field and recentlyTouched(field,flower.Position) then
     local distance=(root.Position-flower.Position).Magnitude
@@ -789,7 +978,7 @@ local function nextHarvestField(recentSparkles)
   end
  end
  for token in pairs(freshTokens) do
-  if token.Parent and token.Transparency<0.95 and isFireflyDrop(token) then
+  if token.Parent and isFireflyDrop(token) then
    local distance=(root.Position-token.Position).Magnitude
    if distance<best then nearest,best=fieldUnder(token.Position),distance end
   end
@@ -827,6 +1016,7 @@ local function runStandaloneFireflies(isRunning,hop)
       local velocity=fly.Parent and fly:FindFirstChild("BodyVelocity")
       return active() and velocity and velocity.Velocity.Magnitude==0 and fieldUnder(fly.Position)==field and (fly.Position-selectedPosition).Magnitude<6
      end
+     markFireflyCluster(field,selectedPosition)
      if not ensureHiveClaimed(active,setStatus,available) then error("Cannot claim hive yet",0) end
      farmingActive=true
      local goal=Vector3.new(selectedPosition.X,field.Position.Y+3,selectedPosition.Z)
@@ -952,7 +1142,7 @@ local function runFireflyScout(isRunning,hop)
  end
 end
 
-local backendURL="https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v4/TifaHop-Fireflies.luau"
+local backendURL="https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v5/TifaHop-Fireflies.luau"
 local visited=config.VisitedServers
 visited[game.JobId]=true
 local function teleportToJob(job,isRunning)
@@ -997,8 +1187,8 @@ if shared.TifaHopFireflyStop then pcall(shared.TifaHopFireflyStop) end
 local gui=Instance.new("ScreenGui")
 gui.Name="TifaHopFireflies";gui.ResetOnSpawn=false;gui.Parent=player:WaitForChild("PlayerGui")
 local frame=Instance.new("Frame")
-frame.Size=UDim2.fromOffset(340,490);frame.Position=UDim2.new(0,20,0.05,0);frame.BackgroundColor3=Color3.fromRGB(24,25,30);frame.Parent=gui
-local scale=Instance.new("UIScale");scale.Scale=math.min(1,(workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.Y or 800)*0.9/490);scale.Parent=frame
+frame.Size=UDim2.fromOffset(340,530);frame.Position=UDim2.new(0,20,0.05,0);frame.BackgroundColor3=Color3.fromRGB(24,25,30);frame.Parent=gui
+local scale=Instance.new("UIScale");scale.Scale=math.min(1,(workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.Y or 800)*0.9/530);scale.Parent=frame
 local function label(text,y,height)
  local item=Instance.new("TextLabel");item.Size=UDim2.new(1,-20,0,height);item.Position=UDim2.fromOffset(10,y)
  item.BackgroundTransparency=1;item.TextColor3=Color3.new(1,1,1);item.TextSize=14;item.TextWrapped=true;item.Font=Enum.Font.Gotham;item.Text=text;item.Parent=frame;return item
@@ -1046,6 +1236,8 @@ local function groupInput(key,title,y)
 end
 groupInput("Group","Group room",370);groupInput("MainAccount","Main username",410)
 groupLabel=label(grouped() and (isGroupAlt() and "Alt scout" or "Main farmer") or "Solo",450,30)
+local digButton=button("Auto dig: "..tostring(config.AutoDig),490)
+digButton.MouseButton1Click:Connect(function() config.AutoDig=not config.AutoDig;saveConfig();digButton.Text="Auto dig: "..tostring(config.AutoDig) end)
 stop=function()
  running=false;farmingActive=false;harvestDigging=false;generation+=1;config.AutoStart=false;saveConfig()
  if speedHuman and speedHuman.Parent and speedHuman.WalkSpeed==writtenSpeed then speedHuman.WalkSpeed=oldSpeed end
@@ -1063,8 +1255,14 @@ start=function()
  local function active() return running and token==generation end
  task.spawn(function()
   while active() do
-   if farmingActive and not harvestDigging and nightTime() and confirmedHive() then pcall(function() refreshWalkingSpeed();dig() end) end
-   task.wait(0.35)
+   if config.AutoDig and not isGroupAlt() and not harvestDigging and nightTime() and confirmedHive() then
+    pcall(function()
+     local character=player.Character
+     local root=character and character:FindFirstChild("HumanoidRootPart")
+     if root and fieldUnder(root.Position) then refreshWalkingSpeed();dig() end
+    end)
+   end
+   task.wait(0.12)
   end
  end)
  task.spawn(function() groupPulse(active) end)

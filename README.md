@@ -5,13 +5,13 @@ Rejoin before switching scripts. Run one at a time.
 ## Standalone Fireflies
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v4/loader-fireflies.luau"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v5/loader-fireflies.luau"))()
 ```
 
 Press Start Fireflies. The Movement button switches Walk/Tween and saves the choice. Tween speed defaults to 8, capped at 12. Autodig automatically equips and activates the player's normal tool. To set initial options explicitly, call the backend directly:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v4/TifaHop-Fireflies.luau"))({
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v5/TifaHop-Fireflies.luau"))({
     Movement = "Walk", -- or Tween
     TweenSpeed = 8,
     WalkSpeedEnabled = true,
@@ -22,7 +22,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-lo
 })
 ```
 
-The standalone backend is about 55 KB and contains no other farm workers or recovered VM. Longer walks load a separately cached Atlas route graph when needed. It uses native pathfinding for walking, TweenService for optional tween travel, and a small set of authored Red Cannon profiles. Hive claiming always walks and checks the normal in-range Claim Hive prompt. Pepper Patch walks normally.
+The standalone backend is about 66 KB and contains no other farm workers or recovered VM. Longer walks load a separately cached Atlas route graph when needed. It uses native pathfinding for walking, TweenService for optional tween travel, and a small set of authored Red Cannon profiles. Hive claiming always walks and checks the normal in-range Claim Hive prompt. Pepper Patch walks normally.
 
 The supplied Atlas source is used as a reference: select nearest stationary NPCBees/Firefly objects, use a two-second revisit delay, and track active Sparkles under workspace.Flowers. This script batches touches of stationary fireflies in the current field before harvesting sparkling flowers and nearby Collectibles. Autodig continues during farming. Sparkle markers are tracked through descendant events rather than repeatedly scanning the entire flower map.
 
@@ -72,6 +72,16 @@ Group transport defaults to https://ntfy.sh using a hashed Fireflies topic and t
 
 Within a level field, movement uses one direct MoveTo per target with no path computation, waypoint detours or jumping. Native pathfinding is only an obstacle fallback after a genuine stall. Longer walks use the authored Atlas A* graph (3,439 nodes / 22,048 links), then native pathfinding only if necessary. Flat supported waypoints do not trigger jumps. Healthy progress extends travel deadlines, avoiding failures merely because movement is slower than expected.
 
-The 385,774-byte route data file is downloaded only when an authored walking route is first needed and cached in TifaHop/firefly_walk_routes_v4.luau. The standalone backend remains about 55 KB. Alt scouts do not load this graph. Runtime re-execution reuses the cached route table.
+The 385,774-byte route data file is downloaded only when an authored walking route is first needed and cached in TifaHop/firefly_walk_routes_v4.luau. The standalone backend remains about 66 KB. Alt scouts do not load this graph. Runtime re-execution reuses the cached route table.
 
 An unmoved, already-touched firefly is not revisited. Movement/relocation makes it eligible again. Delayed sparkle/drop events can restore their harvest field without revisiting old firefly positions. Sparkle farming waits only for a real available tool activation, replacing the fixed 1.2-second pause; background autodig cannot consume the activation while a sparkle is being harvested. Eligible early drops remain associated long enough to collect after the touch batch. Field bounds are cached rather than rebuilt for every candidate.
+
+## Atlas execution, central drop and autodig (fireflies-v5)
+
+Authored walking routes now execute every corner in order, with Atlas-style Jump/Jump1, Drop, Wait, MultiJump, CoconutJump and Night handling. Planning includes Map, Gates, Decorations and Leaderboards, uses Atlas's visible start/nearest goal selection, and omits the redundant start waypoint. The optimized heap search and small route cache remain. Native pathfinding is still a fallback for a route that cannot be completed; character resets, noclip and distant interactions are not imported.
+
+Nearby level transfers under 160 studs do not schedule the cannon. Longer walking transfers compare baseline walking time with the actual cannon approach, launch/flight delay and landing walk, including a margin before choosing the cannon. Only the relevant launch profile is evaluated, and recent route results are reused. Tween travel never uses the cannon.
+
+The central firefly-group token receives priority. It can be collected even if already spawned when the script starts, but must be close to the centre of a detected group of at least three settled fireflies. The best group-centre observation is retained as individual flies leave. Other tokens retain source/time/proximity constraints. Collection walks onto the actual token instead of stopping at a general navigation tolerance. Visible token decals are supported even when the token body is transparent. Cluster association remains a spatial inference where explicit source metadata is absent.
+
+Autodig calls require(ReplicatedStorage.Collectors.LocalCollect).Run, the local collector routine used by the supplied Atlas source, with normal Tool activation as a fallback. Auto Dig is enabled by default and has a GUI toggle. It runs at normal client position during nighttime field farming, not for scout alts. Sparkle harvesting checks for a disappearing/disabled sparkle or a new associated drop, rather than treating a successful function call as proof of harvest.
