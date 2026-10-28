@@ -1,6 +1,6 @@
 # TifaHop — walking and normal interactions
 
-The `gui-fireflies-v1` build uses normal Humanoid walking and visible, in-range game interactions. It removes the recovered direct game-remote invocation helpers, flying/tween movement, noclip helper, tween-to-token shortcut and Vicious fighting platform. Legacy `ViciousMovement = "Tween"` configurations are converted to Walk. UI animation tweens are unrelated to character movement.
+The `gui-fireflies-v2` build uses normal Humanoid walking and visible, in-range game interactions. It removes the recovered direct game-remote invocation helpers, flying/tween movement, noclip helper, tween-to-token shortcut and Vicious fighting platform. Legacy `ViciousMovement = "Tween"` configurations are converted to Walk. UI animation tweens are unrelated to character movement.
 
 This does not establish that automation is permitted by the game or guarantee against account action. Live gameplay has not been tested.
 
@@ -9,7 +9,7 @@ This does not establish that automation is permitted by the game or guarantee ag
 Rejoin before switching from an earlier running build. Then execute this and press Start:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/gui-fireflies-v1/loader.luau"))({
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/gui-fireflies-v2/loader.luau"))({
     ViciousMovement = "Walk",
     UseRedCannon = true,
     DontHop = false,

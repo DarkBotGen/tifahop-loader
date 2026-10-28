@@ -59678,7 +59678,7 @@ Functions.main_0_169 = function(U, ...)
                 R[2] = U[20][1]
                 do local result=pack(R[2](unpack(R,3,2))); for i=1,1 do R[2+i-1]=result[i] end end
                 R[2] = {R[2]}
-                if R[2][1]=="fireflies" then local token=R[0]; task.spawn(function() local ok,reason=pcall(function() runFireflyGrind(function() return U[11][1](token) end,U[28][1],U[12][1],U[2][1]) end); U[2][1].busy=false; U[2][1].farming=false; if not ok and tostring(reason)~="return" then warn("[TifaHop] Fireflies: "..tostring(reason)) end end); U[28][1]("Started: Fireflies"); return end -- dedicated worker, no Vicious or group feed
+                if R[2][1]=="fireflies" then local token=R[0][1]; task.spawn(function() local ok,reason=pcall(function() runFireflyGrind(function() return U[11][1](token) end,U[28][1],U[12][1],U[2][1]) end); U[2][1].busy=false; U[2][1].farming=false; if not ok and tostring(reason)~="return" then warn("[TifaHop] Fireflies: "..tostring(reason)) end end); U[28][1]("Started: Fireflies"); return end -- dedicated worker, no Vicious or group feed
                 R[3] = U[2][1]
                 R[4] = "em"
                 R[5] = R[2][1]
