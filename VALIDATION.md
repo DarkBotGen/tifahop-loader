@@ -8,3 +8,5 @@
 - Existing map navigation, cannon execution, movement cancellation, ground combat, speed persistence and selected-farm persistence tests cover the shared helpers.
 
 Tests mock Roblox services. Live gameplay and executor teleport resume are not established by these checks.
+
+- Standalone repair tests verify editable/saved speed values and invalid-input handling; original tween scale (100 studs at setting 8 takes 1.25 seconds); cancellation; selected movement for cannon access versus forced walking for hives; strict field bounds; rejection of disabled/unrelated sparkles, unvisited locations, false arrival and targets moving before contact. These remain mocked checks, not successful live-game verification.

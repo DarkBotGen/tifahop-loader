@@ -22,6 +22,7 @@ local function saveConfig()
  end) end
 end
 local generation,running=0,false
+local farmingActive=false
 local statusLabel,startButton,hopButton
 local function setStatus(message) if statusLabel then statusLabel.Text=message end end
 local UserConfig={tweenmovement=config.Movement=="Tween",tweenspeed=config.TweenSpeed}
@@ -33,13 +34,25 @@ local function refreshWalkingSpeed()
  local humanoid=character and character:FindFirstChildOfClass("Humanoid")
  if humanoid and humanoid.Health>0 then
   if speedHuman~=humanoid then speedHuman=humanoid;oldSpeed=humanoid.WalkSpeed end
-  if config.WalkSpeedEnabled then humanoid.WalkSpeed=config.WalkSpeed;writtenSpeed=config.WalkSpeed end
+  if config.WalkSpeedEnabled then humanoid.WalkSpeed=config.WalkSpeed;writtenSpeed=config.WalkSpeed
+  elseif writtenSpeed and humanoid.WalkSpeed==writtenSpeed then humanoid.WalkSpeed=oldSpeed;writtenSpeed=nil end
  end
 end
 local navigationInput={pressKey=function(key)
  local input=game:GetService("VirtualInputManager")
  input:SendKeyEvent(true,key,false,game);task.wait(0.05);input:SendKeyEvent(false,key,false,game)
 end}
+
+local function updateSpeedSetting(key,value)
+ local number=tonumber(value)
+ if not number or number~=number or number==math.huge or number==-math.huge then return false end
+ if key=="WalkSpeed" then config.WalkSpeed=math.clamp(math.floor(number+0.5),1,100)
+ elseif key=="TweenSpeed" then config.TweenSpeed=math.clamp(math.floor(number+0.5),4,12);UserConfig.tweenspeed=config.TweenSpeed
+ else return false end
+ if running then refreshWalkingSpeed() end
+ saveConfig()
+ return true
+end
 
 local routeNodes = {
   [70] = Vector3.new(141, 18, -22),
@@ -114,7 +127,7 @@ local function tweenMapTo(destination,isRunning,setStatus)
   local root=character and character:FindFirstChild("HumanoidRootPart")
   if not root or not humanoid or humanoid.Health<=0 then return false end
   local speed=math.clamp(tonumber((speedSettings or UserConfig).tweenspeed) or 8,4,12)
-  local duration=(destination-root.Position).Magnitude/speed
+  local duration=(destination-root.Position).Magnitude/(speed*10) -- original scale: setting 8 = 80 studs/sec
   if duration<0.02 then return isRunning() end
   setStatus("Tweening to destination")
   humanoid:MoveTo(root.Position)
@@ -132,55 +145,70 @@ local function tweenMapTo(destination,isRunning,setStatus)
   tween:Cancel(); connection:Disconnect()
   return isRunning() and player.Character==character and humanoid.Health>0 and (root.Position-destination).Magnitude<=7
 end
-local function walkMapTo(destination,isRunning,setStatus,allowCannon)
-  local character=player.Character
-  local humanoid=character and character:FindFirstChildOfClass("Humanoid")
-  local root=character and character:FindFirstChild("HumanoidRootPart")
-  if not root or not humanoid then return false end
-  local function active() return isRunning() and player.Character==character and root.Parent~=nil and humanoid.Health>0 end
-  local zone=fieldUnder(destination)
-  local pepper=zone and zone.Name=="Pepper Patch"
-  if pepper then allowCannon=false end
-  if allowCannon~=false and useRedCannon and preferredCannonTravel then
-    local handled,result=preferredCannonTravel(destination,active,setStatus)
-    if handled then return result end
-  end
-  if allowCannon~=false and config.Movement=="Tween" then return tweenMapTo(destination,active,setStatus) end
-  refreshWalkingSpeed()
-  for attempt=1,3 do
-    if not active() then return false end
-    local path=game:GetService("PathfindingService"):CreatePath({AgentRadius=2,AgentHeight=5,AgentCanJump=true,WaypointSpacing=5})
-    local ok=pcall(function() path:ComputeAsync(root.Position,destination) end)
-    if not ok or path.Status~=Enum.PathStatus.Success then return false end
-    local failed=false
-    for _,point in ipairs(path:GetWaypoints()) do
-      local began=os.clock()
-      humanoid:MoveTo(point.Position)
-      if point.Action==Enum.PathWaypointAction.Jump then humanoid.Jump=true end
-      while active() and (root.Position-point.Position).Magnitude>5 and os.clock()-began<8 do game:GetService("RunService").Heartbeat:Wait() end
-      if not active() then humanoid:MoveTo(root.Position);return false end
-      if (root.Position-point.Position).Magnitude>5 then failed=true;break end
-    end
-    if not failed and (root.Position-destination).Magnitude<=8 then return true end
+local function walkMapTo(destination,isRunning,setStatus,allowCannon,forceWalk)
+ local character=player.Character
+ local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+ local root=character and character:FindFirstChild("HumanoidRootPart")
+ if not root or not humanoid then return false end
+ local function active() return isRunning() and player.Character==character and root.Parent~=nil and humanoid.Health>0 end
+ local zone=fieldUnder(destination)
+ if zone and zone.Name=="Pepper Patch" then forceWalk=true;allowCannon=false end
+ if not active() then return false end
+ refreshWalkingSpeed()
+ if (root.Position-destination).Magnitude<=3 then return true end
+ if allowCannon~=false and useRedCannon and preferredCannonTravel then
+  local handled,result=preferredCannonTravel(destination,active,setStatus)
+  if handled then return result end
+ end
+ if not forceWalk and config.Movement=="Tween" then return tweenMapTo(destination,active,setStatus) end
+ local function step(position,jump)
+  local began,lastProgress,lastMove=os.clock(),os.clock(),-math.huge
+  local best=(root.Position-position).Magnitude
+  local limit=math.clamp(best/math.max(humanoid.WalkSpeed,1)*2+2,3,10)
+  while active() and os.clock()-began<limit do
+   local distance=(root.Position-position).Magnitude
+   if distance<=3 then return true end
+   if distance<best-0.3 then best=distance;lastProgress=os.clock() end
+   if os.clock()-lastProgress>1.5 then break end
+   if os.clock()-lastMove>0.5 then humanoid:MoveTo(position);lastMove=os.clock() end
+   if jump then humanoid.Jump=true;jump=false end
+   game:GetService("RunService").Heartbeat:Wait()
   end
   return false
+ end
+ if horizontalDistance(root.Position,destination)<30 and math.abs(root.Position.Y-destination.Y)<5 and connectorClear(root.Position,destination,routeFilter()) then
+  if step(destination,false) then return true end
+ end
+ for attempt=1,3 do
+  if not active() then break end
+  setStatus("Walking route "..attempt.."/3")
+  local path=game:GetService("PathfindingService"):CreatePath({AgentRadius=2,AgentHeight=5,AgentCanJump=true,WaypointSpacing=4})
+  local ok=pcall(function() path:ComputeAsync(root.Position,destination) end)
+  if ok and path.Status==Enum.PathStatus.Success then
+   local failed=false
+   for _,point in ipairs(path:GetWaypoints()) do
+    if not step(point.Position,point.Action==Enum.PathWaypointAction.Jump) then failed=true;break end
+   end
+   if not failed and active() and (root.Position-destination).Magnitude<=5 then return true end
+  end
+ end
+ if root.Parent and humanoid.Health>0 then humanoid:MoveTo(root.Position) end
+ return false
 end
 fieldUnder=function(position)
-  local zones=workspace:FindFirstChild("FlowerZones")
-  if not zones then return nil end
-  local params=RaycastParams.new()
-  params.FilterType=Enum.RaycastFilterType.Include
-  params.FilterDescendantsInstances={zones}
-  local hit=workspace:Raycast(position-Vector3.new(0,35,0),Vector3.new(0,60,0),params)
-  if hit and hit.Instance.Parent==zones then return hit.Instance end
-  local best,bestHeight=nil,math.huge
-  for _,zone in ipairs(zones:GetChildren()) do
-    if zone:IsA("BasePart") then
-      local p=zone.CFrame:PointToObjectSpace(position); local height=math.abs(p.Y)
-      if math.abs(p.X)<=zone.Size.X/2 and math.abs(p.Z)<=zone.Size.Z/2 and height<60 and height<bestHeight then best,bestHeight=zone,height end
-    end
+ local zones=workspace:FindFirstChild("FlowerZones")
+ if not zones then return nil end
+ local best,bestHeight=nil,math.huge
+ for _,zone in ipairs(zones:GetChildren()) do
+  if zone:IsA("BasePart") then
+   local p=zone.CFrame:PointToObjectSpace(position)
+   local height=position.Y-zone.Position.Y
+   if math.abs(p.X)<=zone.Size.X/2 and math.abs(p.Z)<=zone.Size.Z/2 and height>=-6 and height<=45 and math.abs(height)<bestHeight then
+    best,bestHeight=zone,math.abs(height)
+   end
   end
-  return best
+ end
+ return best
 end
 
 -- Only the game's visible activation prompt and normal E-key input are used.
@@ -240,7 +268,12 @@ travelRedCannon=function(point,isRunning,setStatus)
     humanoid:MoveTo(platform.Position); heartbeat:Wait()
   end
   if not active() then return false end
-  if not normalActivateAt(platform.Position,"Fire the Red Cannon",active) then
+  local activated=false; local promptDeadline=os.clock()+2
+  while active() and os.clock()<promptDeadline do
+    if normalActivateAt(platform.Position,"Fire the Red Cannon",active) then activated=true;break end
+    heartbeat:Wait()
+  end
+  if not activated then
     cannonUnavailable=true
     setStatus("Red Cannon unavailable; using walking routes")
     return false
@@ -305,7 +338,7 @@ preferredCannonTravel=function(destination,isRunning,setStatus)
   if not label then return false end
   local platform=workspace.Toys["Red Cannon"].Platform
   setStatus("Walking to Red Cannon for "..(destinationField and destinationField.Name or label))
-  if not walkMapTo(platform.Position,isRunning,setStatus,false) then return true,false end
+  if not walkMapTo(platform.Position+Vector3.new(0,3,0),isRunning,setStatus,false) then return true,false end
   if not isRunning() then return true,false end
   if not travelRedCannon({Label="RedCannon:"..label,Position=destination},isRunning,setStatus) then
     setStatus("Red Cannon route failed; travel stopped")
@@ -383,7 +416,7 @@ local function ensureHiveClaimed(isRunning,setStatus,hasTarget)
     local base=arrow and arrow:FindFirstChild("Base")
     if owner and owner.Value==nil and base then
       setStatus("Walking to an empty hive")
-      if walkMapTo(base.Position,isRunning,setStatus,false) then -- hive claiming is walking-only
+      if walkMapTo(base.Position,isRunning,setStatus,false,true) then -- hive claiming is walking-only
         for attempt=1,3 do
           if not isRunning() then return false end
           if confirmedHive() then return true end
@@ -461,15 +494,22 @@ local function collectNearby(origin,isRunning,recentTokens)
   local field=fieldUnder(nearest.Position)
   if field then
    local goal=Vector3.new(nearest.Position.X,field.Position.Y+3,nearest.Position.Z)
-   walkMapTo(goal,function() return isRunning() and nearest.Parent~=nil end,setStatus)
+   local arrived=walkMapTo(goal,function() return isRunning() and nearest.Parent~=nil end,setStatus)
    recentTokens[nearest]=os.clock()
-   return true
+   return arrived and horizontalDistance(root.Position,nearest.Position)<=8
   end
  end
 end
 local sparkleTargets={}
+local touchedFields={}
+local function recentlyTouched(field,position)
+ for _,touch in ipairs(touchedFields[field] or {}) do
+  if os.clock()-touch.time<=45 and horizontalDistance(touch.position,position)<=35 then return true end
+ end
+ return false
+end
 local function trackSparkle(marker)
- if marker.Name~="Sparkles" and marker.Name~="LeafBurst" then return end
+ if marker.Name~="Sparkles" then return end
  local flower=marker.Parent
  while flower and not flower:IsA("BasePart") do flower=flower.Parent end
  if flower then sparkleTargets[marker]=flower end
@@ -488,26 +528,31 @@ local function farmSparkle(field,isRunning,recent)
  local nearest,nearestMarker,distance=nil,nil,math.huge
  for marker,flower in pairs(sparkleTargets) do
   if not marker.Parent or not flower.Parent then sparkleTargets[marker]=nil
-  elseif fieldUnder(flower.Position)==field and (not recent[flower] or os.clock()-recent[flower]>2) then
+  elseif marker.Enabled~=false and not recent[marker] and fieldUnder(flower.Position)==field and recentlyTouched(field,flower.Position) then
    local d=(flower.Position-root.Position).Magnitude
    if d<distance then nearest,nearestMarker,distance=flower,marker,d end
   end
  end
  if not nearest then return false end
  local goal=Vector3.new(nearest.Position.X,field.Position.Y+3,nearest.Position.Z)
- setStatus("Farming firefly sparkles in "..field.Name.." | autodig on")
- if walkMapTo(goal,isRunning,setStatus) then
+ setStatus("Approaching active firefly sparkle in "..field.Name)
+ farmingActive=true
+ local arrived=walkMapTo(goal,function() return isRunning() and nearestMarker.Parent~=nil and nearestMarker.Enabled~=false end,setStatus)
+ arrived=arrived and player.Character==character and horizontalDistance(root.Position,goal)<=6
+ if arrived then
+  setStatus("Farming firefly sparkles in "..field.Name.." | autodig on")
   local untilTime=os.clock()+1.2
-  while isRunning() and nearestMarker.Parent and os.clock()<untilTime do dig();task.wait(0.2) end
+  while isRunning() and nearestMarker.Parent and nearestMarker.Enabled~=false and os.clock()<untilTime do dig();task.wait(0.2) end
  end
- recent[nearest]=os.clock()
- return true
+ recent[nearestMarker]=true
+ return arrived
 end
 local function runStandaloneFireflies(isRunning,hop)
  local recent,blocked,recentTokens,sparkleRecent,roundSeen={},{},{},{},{}
  local lastField=nil
  local idleSince=os.clock()
  while isRunning() do
+  farmingActive=false
   if nightTime() then
    local function active() return isRunning() and nightTime() end
    -- Touch every settled firefly in this field before stopping for sparkles.
@@ -515,19 +560,26 @@ local function runStandaloneFireflies(isRunning,hop)
    if fly and blocked[fly] and os.clock()<blocked[fly] then roundSeen[fly]=math.huge;fly=nil end
    if fly then
     local field=fieldUnder(fly.Position)
+    local selectedPosition=fly.Position
     local ok,reason=pcall(function()
      local function available()
       local velocity=fly.Parent and fly:FindFirstChild("BodyVelocity")
-      return active() and velocity and velocity.Velocity.Magnitude<=0.1
+      return active() and velocity and velocity.Velocity.Magnitude<=0.1 and fieldUnder(fly.Position)==field and (fly.Position-selectedPosition).Magnitude<6
      end
      if not ensureHiveClaimed(active,setStatus,available) then error("Cannot claim hive yet",0) end
-     setStatus("Touching fireflies in "..field.Name.." | autodig on")
-     if lastField~=field then
-      if not walkMapTo(field.Position+Vector3.new(0,3,0),active,setStatus) then error("Cannot reach field yet",0) end
-      lastField=field
-     end
-     local goal=Vector3.new(fly.Position.X,field.Position.Y+3,fly.Position.Z)
+     farmingActive=true
+     local goal=Vector3.new(selectedPosition.X,field.Position.Y+3,selectedPosition.Z)
+     -- Travel directly to the current target, not the field centre.
      if not walkMapTo(goal,available,setStatus) then error("Cannot reach firefly yet",0) end
+     local character=player.Character
+     local root=character and character:FindFirstChild("HumanoidRootPart")
+     if not root or not available() or horizontalDistance(root.Position,fly.Position)>6 or math.abs(root.Position.Y-goal.Y)>8 then error("Firefly moved before contact",0) end
+     lastField=field
+     local touches=touchedFields[field] or {}
+     local fresh={}
+     for _,touch in ipairs(touches) do if os.clock()-touch.time<=45 then table.insert(fresh,touch) end end
+     table.insert(fresh,{position=goal,time=os.clock()});touchedFields[field]=fresh
+     setStatus("Touched firefly in "..field.Name.."; checking next target")
      recent[fly]=os.clock();roundSeen[fly]=math.huge;idleSince=os.clock()
     end)
     if not ok then blocked[fly]=os.clock()+10;roundSeen[fly]=math.huge;setStatus("Firefly route retry: "..tostring(reason)) end
@@ -535,24 +587,28 @@ local function runStandaloneFireflies(isRunning,hop)
     local worked=false
     local ok=pcall(function()
      worked=farmSparkle(lastField,active,sparkleRecent)
-     if not worked then worked=collectNearby(lastField.Position,active,recentTokens) end
+     if not worked then
+      local character=player.Character;local root=character and character:FindFirstChild("HumanoidRootPart")
+      if root then worked=collectNearby(root.Position,active,recentTokens) end
+     end
     end)
     if worked and ok then idleSince=os.clock()
-    elseif os.clock()-idleSince>=3 then lastField=nil;roundSeen={} end
+    elseif os.clock()-idleSince>=2 then lastField=nil;roundSeen={};sparkleRecent={};setStatus("No active firefly drops here; searching") end
    else setStatus("Night server: waiting for fireflies to settle");roundSeen={} end
    -- Keep the night server even when fireflies are moving or absent.
    for target in pairs(recent) do if not target.Parent then recent[target]=nil end end
+   for target in pairs(blocked) do if not target.Parent then blocked[target]=nil end end
    for token in pairs(recentTokens) do if not token.Parent then recentTokens[token]=nil end end
    task.wait(0.1)
   else
-   lastField=nil;roundSeen={}
+   farmingActive=false;lastField=nil;roundSeen={};sparkleRecent={};touchedFields={}
    if config.DontHop then setStatus("Daytime: waiting here (DontHop)");task.wait(1)
    else setStatus("Night ended: searching for a night server");hop(isRunning);task.wait(3) end
   end
  end
 end
 
-local backendURL="https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v1/TifaHop-Fireflies.luau"
+local backendURL="https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/fireflies-v2/TifaHop-Fireflies.luau"
 local visited=config.VisitedServers
 visited[game.JobId]=true
 local function hop(isRunning)
@@ -593,7 +649,7 @@ if shared.TifaHopFireflyStop then pcall(shared.TifaHopFireflyStop) end
 local gui=Instance.new("ScreenGui")
 gui.Name="TifaHopFireflies";gui.ResetOnSpawn=false;gui.Parent=player:WaitForChild("PlayerGui")
 local frame=Instance.new("Frame")
-frame.Size=UDim2.fromOffset(320,215);frame.Position=UDim2.new(0,20,0.35,0);frame.BackgroundColor3=Color3.fromRGB(24,25,30);frame.Parent=gui
+frame.Size=UDim2.fromOffset(340,380);frame.Position=UDim2.new(0,20,0.05,0);frame.BackgroundColor3=Color3.fromRGB(24,25,30);frame.Parent=gui
 local function label(text,y,height)
  local item=Instance.new("TextLabel");item.Size=UDim2.new(1,-20,0,height);item.Position=UDim2.fromOffset(10,y)
  item.BackgroundTransparency=1;item.TextColor3=Color3.new(1,1,1);item.TextSize=14;item.TextWrapped=true;item.Font=Enum.Font.Gotham;item.Text=text;item.Parent=frame;return item
@@ -608,8 +664,29 @@ startButton=button("Start Fireflies",90)
 hopButton=button("DontHop: "..tostring(config.DontHop),130)
 local movementButton=button("Movement: "..config.Movement,170)
 movementButton.MouseButton1Click:Connect(function() config.Movement=config.Movement=="Walk" and "Tween" or "Walk";UserConfig.tweenmovement=config.Movement=="Tween";saveConfig();movementButton.Text="Movement: "..config.Movement end)
+local cannonButton=button("Use Red Cannon: "..tostring(config.UseRedCannon),210)
+cannonButton.MouseButton1Click:Connect(function()
+ config.UseRedCannon=not config.UseRedCannon;useRedCannon=config.UseRedCannon;cannonUnavailable=false
+ saveConfig();cannonButton.Text="Use Red Cannon: "..tostring(config.UseRedCannon)
+end)
+local speedButton=button("Walkspeed enabled: "..tostring(config.WalkSpeedEnabled),250)
+speedButton.MouseButton1Click:Connect(function()
+ config.WalkSpeedEnabled=not config.WalkSpeedEnabled;refreshWalkingSpeed();saveConfig()
+ speedButton.Text="Walkspeed enabled: "..tostring(config.WalkSpeedEnabled)
+end)
+local function speedInput(key,title,y)
+ local titleLabel=label(title,y,32);titleLabel.Size=UDim2.new(0.6,-10,0,32);titleLabel.TextXAlignment=Enum.TextXAlignment.Left
+ local input=Instance.new("TextBox");input.Size=UDim2.new(0.4,-10,0,32);input.Position=UDim2.new(0.6,0,0,y)
+ input.BackgroundColor3=Color3.fromRGB(40,42,52);input.TextColor3=Color3.new(1,1,1);input.Font=Enum.Font.Gotham;input.TextSize=15
+ input.ClearTextOnFocus=false;input.Text=tostring(config[key]);input.Parent=frame
+ input.FocusLost:Connect(function()
+  updateSpeedSetting(key,input.Text);input.Text=tostring(config[key])
+ end)
+end
+speedInput("WalkSpeed","Walk speed (1-100)",290)
+speedInput("TweenSpeed","Tween speed (4-12 x10)",330)
 local function stop()
- running=false;generation+=1;config.AutoStart=false;saveConfig()
+ running=false;farmingActive=false;generation+=1;config.AutoStart=false;saveConfig()
  if speedHuman and speedHuman.Parent and speedHuman.WalkSpeed==writtenSpeed then speedHuman.WalkSpeed=oldSpeed end
  local character=player.Character
  local root=character and character:FindFirstChild("HumanoidRootPart")
@@ -625,7 +702,7 @@ local function start()
  local function active() return running and token==generation end
  task.spawn(function()
   while active() do
-   if nightTime() and confirmedHive() then pcall(function() refreshWalkingSpeed();dig() end) end
+   if farmingActive and nightTime() and confirmedHive() then pcall(function() refreshWalkingSpeed();dig() end) end
    task.wait(0.35)
   end
  end)
