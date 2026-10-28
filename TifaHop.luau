@@ -24,7 +24,7 @@ if options == nil and readfile and isfile and isfile(configPath) then
 end
 if options == nil then options = {} end
 assert(type(options) == "table", "TifaHop configuration must be a table")
-local allowed = {MinViciousLevel=true, MaxViciousLevel=true, DontHop=true, MainAccount=true, Group=true, ViciousMovement=true, Mode=true, UseRedCannon=true}
+local allowed = {MinViciousLevel=true, MaxViciousLevel=true, DontHop=true, MainAccount=true, Group=true, ViciousMovement=true, Mode=true, UseRedCannon=true, WalkSpeedEnabled=true, WalkSpeed=true}
 for key in pairs(options) do assert(allowed[key], "Unknown TifaHop setting: " .. tostring(key)) end
 local function level(key, fallback)
   local value = options[key]
@@ -51,6 +51,11 @@ assert(farmMode=="Vicious" or farmMode=="Fireflies", "Mode must be Vicious or Fi
 local useRedCannon=options.UseRedCannon
 if useRedCannon==nil then useRedCannon=true end
 assert(type(useRedCannon)=="boolean", "UseRedCannon must be true or false")
+local speedEnabled=options.WalkSpeedEnabled
+if speedEnabled==nil then speedEnabled=true end
+assert(type(speedEnabled)=="boolean", "WalkSpeedEnabled must be true or false")
+local walkingSpeed=options.WalkSpeed or 50
+assert(type(walkingSpeed)=="number" and walkingSpeed==walkingSpeed and walkingSpeed>=1 and walkingSpeed<=100, "WalkSpeed must be from 1 to 100")
 local navigationInput, fireflyCollectStep, fireflyTravel
 local mainAccount = options.MainAccount or ""
 local group = options.Group or ""
@@ -64,13 +69,13 @@ local isMain = grouped and player.Name:lower() == mainAccount:lower()
 local UserConfig = {
   mode="vichop", minlvl=minLevel, maxlvl=maxLevel, donthop=dontHop, movement=viciousMovement,
   room=grouped and group or "", main=isMain, alt=grouped and not isMain, cannon=useRedCannon,
-  walkspeedon=false, walkdynamic=false, fastrare=false, usesprinkler=false, planters=false,
+  walkspeedon=speedEnabled, walkspeed=walkingSpeed, walkdynamic=false, fastrare=false, usesprinkler=false, planters=false,
 }
 shared.TifaHop = {
   MinViciousLevel=minLevel, MaxViciousLevel=maxLevel, DontHop=dontHop,
   MainAccount=mainAccount, Group=group,
   ViciousMovement=viciousMovement,
-  Mode=farmMode, UseRedCannon=useRedCannon,
+  Mode=farmMode, UseRedCannon=useRedCannon, WalkSpeedEnabled=speedEnabled, WalkSpeed=walkingSpeed,
 }
 -- Original native overrides are applied after saved settings. Supplying these
 -- makes the loader settings authoritative during startup without polling.
@@ -83,8 +88,40 @@ if writefile and makefolder and isfolder then
   end)
   if not ok then warn("[TifaHop] Could not save loader configuration: " .. tostring(reason)) end
 end
+local speedSettings
+local speedCharacter, originalSpeed, lastWrittenSpeed
+local function refreshWalkingSpeed()
+  local settings=speedSettings or UserConfig
+  local enabled=settings.walkspeedon==true
+  local value=math.clamp(tonumber(settings.walkspeed) or walkingSpeed,1,100)
+  local character=player.Character
+  local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+  if humanoid and humanoid.Health>0 then
+    if speedCharacter~=humanoid then speedCharacter=humanoid; originalSpeed=humanoid.WalkSpeed; lastWrittenSpeed=nil end
+    if enabled then humanoid.WalkSpeed=value; lastWrittenSpeed=value
+    elseif lastWrittenSpeed then
+      if humanoid.WalkSpeed==lastWrittenSpeed then humanoid.WalkSpeed=originalSpeed end
+      lastWrittenSpeed=nil
+    else originalSpeed=humanoid.WalkSpeed end
+  end
+  if shared.TifaHop.WalkSpeedEnabled~=enabled or shared.TifaHop.WalkSpeed~=value then
+    shared.TifaHop.WalkSpeedEnabled=enabled; shared.TifaHop.WalkSpeed=value
+    UserConfig.walkspeedon=enabled; UserConfig.walkspeed=value
+    shared.walkspeedon=enabled; shared.walkspeed=value
+    if writefile then pcall(function() writefile(configPath,http:JSONEncode(shared.TifaHop)) end) end
+  end
+end
 local function applyUserConfig(settings)
   for key,value in pairs(UserConfig) do settings[key]=value end
+  speedSettings=settings
+  pcall(function()
+    if shared.TifaHopSpeedConnection then shared.TifaHopSpeedConnection:Disconnect() end
+    local elapsed=0
+    shared.TifaHopSpeedConnection=game:GetService("RunService").Heartbeat:Connect(function(dt)
+      elapsed+=dt
+      if elapsed>=0.25 then elapsed=0; refreshWalkingSpeed() end
+    end)
+  end)
 end
 
 -- Some original branding is assembled from multiple string fragments.
@@ -7103,6 +7140,7 @@ local function findMapRoute(from,to,excludedEdges,excludedStarts,isRunning,allow
   return nil,"No connected walking route"
 end
 local function walkMapTo(destination,isRunning,setStatus,allowCannon)
+  if refreshWalkingSpeed then refreshWalkingSpeed() end
   local character=player.Character
   local humanoid=character and character:FindFirstChildOfClass("Humanoid")
   local root=character and character:FindFirstChild("HumanoidRootPart")
@@ -81184,6 +81222,42 @@ Functions.main_0_173=function() end -- game movement-speed cache modification di
 Functions.main_0_174_0=function() end -- WalkSpeed override disabled
 Functions.main_0_183_133_0=function() end -- no scripted WalkSpeed restoration needed
 
+-- Avoid visible local attack markers; never move the character by CFrame.
+Functions.viciousDodgeGoal=function(rootPosition,field,preferred)
+  local hazards={}
+  local particles=workspace and workspace:FindFirstChild("Particles")
+  if not particles then return preferred,false end
+  for _,part in ipairs(particles:GetDescendants()) do
+    local name=part.Name:lower()
+    if part:IsA("BasePart") and part.Transparency<1 and
+      (name=="warningdisk" or name:find("spike",1,true) or name:find("impale",1,true)) and
+      math.abs(part.Position.Y-rootPosition.Y)<15 and horizontalDistance(part.Position,rootPosition)<45 then
+      table.insert(hazards,{position=part.Position,radius=math.max(part.Size.X,part.Size.Z)/2+4})
+    end
+  end
+  local function clearance(position)
+    local result=math.huge
+    for _,hazard in ipairs(hazards) do result=math.min(result,horizontalDistance(position,hazard.position)-hazard.radius) end
+    return result
+  end
+  if clearance(rootPosition)>5 and clearance(preferred)>2 then return preferred,false end
+  local best,bestScore=nil,-math.huge
+  for i=0,15 do
+    local angle=i*math.pi/8
+    local goal=Vector3.new(rootPosition.X+math.cos(angle)*14,field.Position.Y+3,rootPosition.Z+math.sin(angle)*14)
+    if fieldUnder(goal)==field and connectorClear(rootPosition,goal,routeFilter()) then
+      -- Also penalize a segment that crosses an attack marker.
+      local score=clearance(goal)
+      for step=1,3 do
+        local point=rootPosition+(goal-rootPosition)*(step/4)
+        score=math.min(score,clearance(point))
+      end
+      if score>bestScore then best,bestScore=goal,score end
+    end
+  end
+  return best or rootPosition,true
+end
+
 Functions.main_0_126=function(U,target,token)
   local state=U[11][1]
   local function running() return U[6][1](token) end
@@ -81218,10 +81292,14 @@ Functions.main_0_126=function(U,target,token)
         -- directly beneath the bee. Bees perform their normal attacks.
         local angle=math.floor((os.clock()-began)/3)%4*math.pi/2
         local goal=Vector3.new(targetPosition.X+math.cos(angle)*12,field.Position.Y+3,targetPosition.Z+math.sin(angle)*12)
+        local dodging
+        goal,dodging=Functions.viciousDodgeGoal(root.Position,field,goal)
+        if refreshWalkingSpeed then refreshWalkingSpeed() end
+        if dodging then status("Dodging Vicious Bee stingers") end
         root=player.Character:FindFirstChild("HumanoidRootPart")
         local humanoid=player.Character:FindFirstChildOfClass("Humanoid")
         if humanoid and root then humanoid:MoveTo(goal) end
-        if fireflyCollectStep then
+        if fireflyCollectStep and not dodging then
           fireflyCollectStep({loot=true,ignoreprio=true,ignorefield=true,ignoreflower=true,range=25,origin=goal})
         end
       end

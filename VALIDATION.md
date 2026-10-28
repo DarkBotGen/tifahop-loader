@@ -11,3 +11,5 @@
 - Configuration and startup regressions cover persistent modes, account roles, walking-only normalization, keyless startup, duplicate prevention and error recovery. Twenty-three isolated pure helpers still match the original interpreter.
 
 Tests use mocked game services. They do not establish successful live traversal/combat, availability of external services, game approval of automation or protection against bans.
+
+- Speed tests verify toggle/value persistence, reload, application, disable restoration, respawn and invalid values. Dodge tests verify warning disks, spikes, clear-route filtering, blocked exits and invisible-marker filtering.

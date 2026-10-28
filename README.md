@@ -1,6 +1,6 @@
 # TifaHop — walking and normal interactions
 
-The `target-first-v1` build uses normal Humanoid walking and visible, in-range game interactions. It removes the recovered direct game-remote invocation helpers, flying/tween movement, noclip helper, character speed overrides, tween-to-token shortcut and Vicious fighting platform. Legacy `ViciousMovement = "Tween"` configurations are converted to Walk. UI animation tweens are unrelated to character movement.
+The `speed-dodge-v1` build uses normal Humanoid walking and visible, in-range game interactions. It removes the recovered direct game-remote invocation helpers, flying/tween movement, noclip helper, tween-to-token shortcut and Vicious fighting platform. Legacy `ViciousMovement = "Tween"` configurations are converted to Walk. UI animation tweens are unrelated to character movement.
 
 This does not establish that automation is permitted by the game or guarantee against account action. Live gameplay has not been tested.
 
@@ -9,11 +9,13 @@ This does not establish that automation is permitted by the game or guarantee ag
 Rejoin before switching from an earlier running build. Then execute this and press Start:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/target-first-v1/loader.luau"))({
+loadstring(game:HttpGet("https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/speed-dodge-v1/loader.luau"))({
     Mode = "Vicious", -- "Vicious" or "Fireflies"
     ViciousMovement = "Walk",
     UseRedCannon = true,
     DontHop = false,
+    WalkSpeedEnabled = true,
+    WalkSpeed = 50,
     MinViciousLevel = 1,
     MaxViciousLevel = 12,
     MainAccount = "YourMainUsername",
@@ -40,3 +42,9 @@ The script searches first and claims no hive on an empty server. After selecting
 `Mode = "Fireflies"` independently farms stationary NPCBees/Firefly objects during 19:00–05:00, approaches their fields and collects nearby drops. It skips immediate revisits, searches again, and invokes the existing server hopper after 20 seconds without a usable target or a 180-second session. It searches successive servers for night rather than guaranteeing a night destination. With DontHop enabled, it stays and keeps checking. Main/alt coordination is only used by Vicious mode.
 
 The loader caches the exact backend for rejoin recovery and saves per-account options under TifaHop/. The script requires its original Roblox/executor APIs and remote HTTP services for features such as server discovery and group coordination. Existing relay hosting has not been replaced.
+
+## Walking speed and dodging
+
+WalkSpeedEnabled and WalkSpeed (1–100) persist in the loader configuration. UI toggle and speed changes are saved while running and applied to the current Humanoid, including after respawn. Disabling restores its previous speed when TifaHop still owns the current override. Walking routes and combat use that same Humanoid speed.
+
+Ground combat avoids visible nearby WarningDisk, spike and impale parts in workspace.Particles. It scores clear, in-field escape directions, considers the route through markers, and pauses combat loot movement while dodging. Unknown or unreplicated attack markers cannot be detected. Live-game attack recognition has not been verified.
