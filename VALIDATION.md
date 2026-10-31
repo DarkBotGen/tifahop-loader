@@ -17,3 +17,14 @@ Tests mock Roblox services. Live gameplay and executor teleport resume are not e
 - fireflies-v4 regressions verify one direct command per local target with zero ray scans/path computations/jumps; a complete cached authored route from the cannon area to Mountain Top without native pathfinding; no jump at flat supported native waypoints; one visit per unmoved firefly; recovery of delayed sparkles after leaving the touch phase; and removal of the fixed 1.2-second harvest pause. Final backend and separate route data compile. These tests remain mocked and do not confirm live performance.
 
 - fireflies-v5 tests verify ordered Atlas corners and Jump1 execution; original local collector API invocation, toggle/death guards and tool fallback; acceptance and priority of an already-spawned central token while rejecting unrelated field tokens; physical pickup with a transparent token body; nearby transfers without cannon planning; long-transfer walking/approach/landing cost comparison; and no cannon in Tween mode. The full authored route regression, night farming, group role/report validation and other shared-helper regressions continue to pass in mocks.
+
+
+Normal custom relay / laptop package validation:
+- Both normal backends and loaders compile with official Luau.
+- Configuration mocks verify custom relay normalization, persistence, role
+  injection before use, saved-default override, and malformed URL rejection.
+- Existing configuration and original-VM differential tests pass.
+- Actual loopback HTTP tests cover normal/firefly topic publish and polling,
+  message-ID cursors, topic isolation, secret path checks, limits, and expiry.
+- Relay/manager Python and installer PowerShell syntax checks pass.
+- No Roblox live-game or external tunnel/laptop end-to-end test performed.

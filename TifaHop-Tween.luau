@@ -36,7 +36,7 @@ if ok and type(saved) == "table" then options = saved end
 end
 if options == nil then options = {} end
 assert(type(options) == "table", "TifaHop configuration must be a table")
-local allowed = {MinViciousLevel=true, MaxViciousLevel=true, DontHop=true, MainAccount=true, Group=true, ViciousMovement=true, Mode=true, TweenSpeed=true, UseRedCannon=true, WalkSpeedEnabled=true, WalkSpeed=true}
+local allowed = {RelayURL=true,MinViciousLevel=true, MaxViciousLevel=true, DontHop=true, MainAccount=true, Group=true, ViciousMovement=true, Mode=true, TweenSpeed=true, UseRedCannon=true, WalkSpeedEnabled=true, WalkSpeed=true}
 for key in pairs(options) do assert(allowed[key], "Unknown TifaHop setting: " .. tostring(key)) end
 local function level(key, fallback)
 local value = options[key]
@@ -71,17 +71,21 @@ assert(type(mainAccount)=="string", "MainAccount must be a Roblox username, or a
 assert(type(group)=="string", "Group must be a shared room name, or an empty string")
 mainAccount = mainAccount:match("^%s*(.-)%s*$")
 group = group:match("^%s*(.-)%s*$")
+local relayURL=options.RelayURL or "https://novahop-relay.lmgmeee.workers.dev"
+assert(type(relayURL)=="string", "RelayURL must be an HTTP or HTTPS base URL")
+relayURL=relayURL:match("^%s*(.-)%s*$"):gsub("/+$", "")
+assert(relayURL:match("^https?://[^/%s?#]+[^%s?#]*$") and not relayURL:find("@",1,true), "RelayURL must be an HTTP or HTTPS base URL without credentials, query, or fragment")
 local grouped = group ~= ""
 assert(not grouped or mainAccount ~= "", "Set MainAccount when using a Group")
 local isMain = grouped and player.Name:lower() == mainAccount:lower()
 local UserConfig = {
 minlvl=minLevel, maxlvl=maxLevel, donthop=dontHop, movement=viciousMovement, tweenmovement=viciousMovement=="Tween", tweenspeed=tweenSpeed,
-room=grouped and group or "", main=isMain, alt=grouped and not isMain, cannon=useRedCannon,
+relay=relayURL, room=grouped and group or "", main=isMain, alt=grouped and not isMain, cannon=useRedCannon,
 walkspeedon=speedEnabled, walkspeed=walkingSpeed,  fastrare=false, usesprinkler=false, planters=false,
 }
 shared.TifaHop = {
 MinViciousLevel=minLevel, MaxViciousLevel=maxLevel, DontHop=dontHop,
-MainAccount=mainAccount, Group=group,
+MainAccount=mainAccount, Group=group, RelayURL=relayURL,
 ViciousMovement=viciousMovement, TweenSpeed=tweenSpeed,
 UseRedCannon=useRedCannon, WalkSpeedEnabled=speedEnabled, WalkSpeed=walkingSpeed,
 }

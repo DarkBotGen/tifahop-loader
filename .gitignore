@@ -1,2 +1,8 @@
 *.luac
 *.zip
+
+__pycache__/
+relay/secret.txt
+relay/settings.json
+relay/YOUR-RELAY-URL.txt
+relay/manager.log

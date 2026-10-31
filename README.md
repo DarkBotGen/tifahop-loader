@@ -85,3 +85,16 @@ Nearby level transfers under 160 studs do not schedule the cannon. Longer walkin
 The central firefly-group token receives priority. It can be collected even if already spawned when the script starts, but must be close to the centre of a detected group of at least three settled fireflies. The best group-centre observation is retained as individual flies leave. Other tokens retain source/time/proximity constraints. Collection walks onto the actual token instead of stopping at a general navigation tolerance. Visible token decals are supported even when the token body is transparent. Cluster association remains a spatial inference where explicit source metadata is absent.
 
 Autodig calls require(ReplicatedStorage.Collectors.LocalCollect).Run, the local collector routine used by the supplied Atlas source, with normal Tool activation as a fallback. Auto Dig is enabled by default and has a GUI toggle. It runs at normal client position during nighttime field farming, not for scout alts. Sparkle harvesting checks for a disappearing/disabled sparkle or a new associated drop, rather than treating a successful function call as proof of harvest.
+
+
+Normal Walk/Tween custom relay update (`normal-relay-v1`): both loaders now
+accept `RelayURL`, save it per account, and apply it before group callbacks
+capture the relay address. Set the same URL on all cooperating accounts.
+Use the loaders under the `normal-relay-v1` tag.
+
+For a Windows 10/11 x64 laptop relay, extract the supplied relay package and
+run `START.cmd`. It installs portable dependencies in `%LOCALAPPDATA%/TifaHopRelay`
+and opens the private base URL in a text file. Optional sign-in autostart and
+named Cloudflare tunnel configuration are documented in `relay/README.txt`.
+Quick Tunnel hostnames change on tunnel restart; permanent URLs require a
+named tunnel/domain. Public tunnel behavior has not been tested on the laptop.
