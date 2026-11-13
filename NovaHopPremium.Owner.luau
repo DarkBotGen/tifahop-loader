@@ -1,6 +1,106 @@
 -- NovaHop Premium owner edition. Execute this whole file.
 -- The embedded payload is decoded and formatted in the companion readable file.
 local ownerSource = [=[
+local function multiMainName(value)
+	return type(value) == "string" and value:match("^%s*(.-)%s*$"):lower() or ""
+end
+
+local function multiMainEnabled(config)
+	local vicious = multiMainName(config.viciousmain)
+	local sprout = multiMainName(config.sproutmain)
+	return config.room ~= "" and vicious ~= "" and sprout ~= "" and vicious ~= sprout
+end
+
+local function multiMainTarget(config, kind)
+	if not multiMainEnabled(config) then
+		return nil
+	end
+	if kind == "vic" then
+		return multiMainName(config.viciousmain)
+	elseif kind == "spr" then
+		return multiMainName(config.sproutmain)
+	end
+end
+
+local function applyMultiMainRole(config, username)
+	if not multiMainEnabled(config) then
+		return
+	end
+	local name = multiMainName(username)
+	local vicious = name == multiMainTarget(config, "vic")
+	local sprout = name == multiMainTarget(config, "spr")
+	config.main, config.alt = vicious or sprout, not (vicious or sprout)
+	config.mode = sprout and "sprouts" or "vichop"
+end
+
+local function roomEventKey(config, job, kind)
+	if multiMainEnabled(config) and (kind == "vic" or kind == "spr") then
+		return kind .. ":" .. tostring(job)
+	end
+	return job
+end
+
+local function runMultiMainScout(token, running, config, findVicious, findSprout, fieldAt, publish, players, status, hop, sproutLevels)
+	local pending = {}
+	local jobStarted = os.clock()
+	local nextScan = 0
+	local lastReport = {}
+	local finished = {}
+	while running(token) do
+		local now = os.clock()
+		if now >= nextScan then
+			local vicious = findVicious(true)
+			local sprout, sproutType, sproutField = findSprout()
+			local level = vicious and vicious:FindFirstChild("Level")
+			local root = vicious and vicious:FindFirstChild("HumanoidRootPart")
+			local viciousLevel = vicious and ((level and tonumber(level.Value)) or tonumber(vicious.Name:match("%d+")))
+			local function report(kind, value, gifted, field)
+				if value and not finished[kind] and (not lastReport[kind] or now - lastReport[kind] >= 12) then
+					if publish(kind, value, gifted, field) then
+						lastReport[kind] = now
+						pending[kind] = pending[kind] or now
+					end
+				end
+			end
+			local vicField = root and fieldAt(root.Position)
+			if viciousLevel and viciousLevel > 0 then
+				report("vic", viciousLevel, vicious.Name:find("Gifted", 1, true) ~= nil, (vicField and vicField.Name) or "?")
+			end
+			if sprout and sproutField then
+				report("spr", sproutLevels[sproutType] or 0, false, sproutField.Name)
+			end
+			nextScan = now + 1
+		end
+
+		for kind, reportedAt in pairs(pending) do
+			if now - reportedAt >= 75 then
+				pending[kind] = nil
+				finished[kind] = true
+			else
+				for _, player in ipairs(players:GetPlayers()) do
+					if multiMainName(player.Name) == multiMainTarget(config, kind) then
+						pending[kind] = nil
+						finished[kind] = true
+						break
+					end
+				end
+			end
+		end
+		if pending.vic or pending.spr then
+			status(pending.vic and pending.spr and "Waiting for Vicious and Sprout mains"
+				or pending.vic and "Waiting for Vicious main" or "Waiting for Sprout main")
+		else
+			status("Scouting for Vicious Bees and Sprouts")
+			if not config.donthop and now - jobStarted >= math.max(5, config.dvichop or 0, config.dsprouts or 0) then
+				hop()
+				jobStarted = os.clock()
+			end
+		end
+		task.wait(0.5)
+	end
+end
+
+
 -- NovaHop Premium owner edition based on Hop.lua.
 local db
 local ar
@@ -14384,6 +14484,7 @@ while true do
 											aQ = if aS then 179 else 132.
 										elseif aQ < 5700. then
 											cm.room = tostring(cm.room)
+											applyMultiMainRole(cm, ct.Name)
 											local pR = type(cm.fieldsoff)
 											local pS = 248602996
 											local pT = "table"
@@ -16072,7 +16173,7 @@ while true do
 																bE = if bi then 55 else 18.
 															end
 														elseif bE < 3658 then
-															bi = co.events[br.job]
+															bi = co.events[roomEventKey(cm, br.job, br.t == "take" and br.kind or br.t)]
 															bE = if bi then 64 else 13
 														elseif bE < 3659 then
 															if bE == 3658 then
@@ -16459,7 +16560,7 @@ while true do
 															end
 														elseif bE < 3688 then
 															if bE == 3687. then
-																co.events[br.job] = bB
+																co.events[roomEventKey(cm, br.job, br.t)] = bB
 																bE = 40
 															else
 																bE = 3646
@@ -16476,7 +16577,9 @@ while true do
 													elseif bE < 3695 then
 														if bE < 3692 then
 															if bE < 3691 then
-																bB.claimed = true
+																if not multiMainTarget(cm, bB.kind) or multiMainName(br.by) == multiMainTarget(cm, bB.kind) then
+ bB.claimed = true
+ end
 																bE = 61
 															elseif bE == 3691 then
 																local rJ = br.t
@@ -16959,6 +17062,7 @@ while true do
 											end
 										end
 										co.applyset = function(U, c1)
+											if multiMainEnabled(cm) then return end
 											local a5, bw, aZ, bH, a9, bv, bC, a0, bq, bm, bo, bx =
 												nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 											local bu = nil
@@ -26285,6 +26389,7 @@ while true do
 											})
 										end
 										bv = function(aa, cK)
+ local eventKey = roomEventKey(cm, aa, cK)
 											local aZ = nil
 											local zp = dc
 											local zq = db
@@ -26297,10 +26402,10 @@ while true do
 													elseif aZ < 8924 then
 														break
 													elseif aZ < 8925. then
-														co.events[aa].claimed = true
+														co.events[eventKey].claimed = true
 														aZ = 2
 													elseif aZ == 8925. then
-														zp[33.]({ ["t"] = "take", ["job"] = aa })
+														zp[33.]({ ["t"] = "take", ["job"] = aa, ["kind"] = cK, ["by"] = ct.Name })
 														aZ = 0.
 													else
 														aZ = 16204
@@ -26309,7 +26414,7 @@ while true do
 												elseif aZ < 15812 then
 													if aZ < 15558. then
 														if aZ == 8926 then
-															aZ = if co.events[aa] then 1 else 2
+															aZ = if co.events[eventKey] then 1 else 2
 														else
 															break
 														end
@@ -26322,6 +26427,8 @@ while true do
 											end
 										end
 										dc[100] = function(ac, cD)
+											local assigned = multiMainTarget(cm, ac)
+	if multiMainEnabled(cm) and assigned ~= multiMainName(ct.Name) then return {} end
 											local bf, bD, bj, bE, a9, bH, a_, bk, bB, bI =
 												nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 											local aX = nil
@@ -27995,7 +28102,7 @@ while true do
 																			br = if true then 5 else 11
 																		end
 																	elseif br < 3. then
-																		bv(a7.job)
+																		bv(a7.job, af)
 																		local AK = a7.field
 																		cp("Joining " .. AK)
 																		AK = a7.field
@@ -28006,7 +28113,7 @@ while true do
 																		br = 1
 																	else
 																		AG[2059](bQ.TeleportCancel, bQ)
-																		br = if co.events[a7.job] then 7 else 15.
+																		br = if co.events[roomEventKey(cm, a7.job, af)] then 7 else 15.
 																	end
 																elseif br < 6. then
 																	if br < 5 then
@@ -28020,7 +28127,7 @@ while true do
 																elseif br < 7 then
 																	br = if a1 then 8 else 16
 																elseif br < 8 then
-																	co.events[a7.job].claimed = false
+																	co.events[roomEventKey(cm, a7.job, af)].claimed = false
 																	br = 15.
 																else
 																	br = if a1 then 9. else 13
@@ -38883,6 +38990,7 @@ while true do
 											end
 										end
 										dc[66.] = function(cU, ca, da)
+											if multiMainEnabled(cm) then return multiMainName(ct.Name) == multiMainTarget(cm, "spr") and "sprouts" or "vichop" end
 											local ar = nil
 											local bf = nil
 											local G8 = db
@@ -41848,6 +41956,7 @@ while true do
 										end
 										dc[19] = nil
 										dc[2] = function(bK)
+											applyMultiMainRole(cm, ct.Name)
 											local bu, aU, bF, ba, bG, bw, aX, aF, aA, bi, bq, aN, a4 =
 												nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 											local bc = nil
@@ -41937,6 +42046,11 @@ while true do
 																end
 															elseif bc == 4658 then
 																aU = aX
+																	if multiMainEnabled(cm) and cm.alt then
+		aU = function(token)
+			runMultiMainScout(token, b_, cm, dc[95], bZ, bS, dc[46], b5, b3, b4, bb)
+		end
+	end
 																local Jb = 4
 																local Jc = cj[Jb]
 																local Jd = bF
@@ -67898,6 +68012,25 @@ while true do
 																		end
 																	end)
 																	bH, aS = nil, nil
+																	local function addMainNameField(key, label)
+	local input = bB:Clone()
+	input.Text = cm[key]
+	input.PlaceholderText = label
+	input.LayoutOrder = aj()
+	input.Parent = bF
+	input.FocusLost:Connect(function()
+		local name = input.Text:match("^%s*(.-)%s*$")
+		input.Text = name
+		if name ~= cm[key] then
+			bj(function()
+				cm[key] = name
+				applyMultiMainRole(cm, ct.Name)
+			end)
+		end
+	end)
+end
+addMainNameField("viciousmain", "Vicious main username")
+addMainNameField("sproutmain", "Sprout main username")
 																	bH = aP(aK(bF, "Main account"), function()
 																		return cm.main
 																	end, function(Y)
@@ -73144,6 +73277,8 @@ while true do
 									["dangermobs"] = ad1,
 									["room"] = ad9,
 									["main"] = false,
+ ["viciousmain"] = "",
+ ["sproutmain"] = "",
 									["alt"] = false,
 									["relay"] = aea,
 									["autoresume"] = true,
@@ -84251,8 +84386,8 @@ while true do
 																alx = ajO[1583]
 																alw = co.events
 																J = false
-																for V in alx(alw) do
-																	aq = V
+																for V, report in alx(alw) do
+																	aq = report.job
 																	local I = aq
 																	local Q = nil
 																	Q = 1
@@ -100739,6 +100874,7 @@ while true do
 												aQ = if aS then 179 else 132.
 											elseif aQ < 5700. then
 												cm.room = tostring(cm.room)
+												applyMultiMainRole(cm, ct.Name)
 												local aAR = type(cm.fieldsoff)
 												local aAS = 248602996
 												local aAT = "table"
@@ -102449,7 +102585,7 @@ while true do
 																	bE = if bi then 55 else 18.
 																end
 															elseif bE < 3658 then
-																bi = co.events[br.job]
+																bi = co.events[roomEventKey(cm, br.job, br.t == "take" and br.kind or br.t)]
 																bE = if bi then 64 else 13
 															elseif bE < 3659 then
 																if bE == 3658 then
@@ -102839,7 +102975,7 @@ while true do
 																end
 															elseif bE < 3688 then
 																if bE == 3687. then
-																	co.events[br.job] = bB
+																	co.events[roomEventKey(cm, br.job, br.t)] = bB
 																	bE = 40
 																else
 																	bE = 3646
@@ -102856,7 +102992,9 @@ while true do
 														elseif bE < 3695 then
 															if bE < 3692 then
 																if bE < 3691 then
-																	bB.claimed = true
+																	if not multiMainTarget(cm, bB.kind) or multiMainName(br.by) == multiMainTarget(cm, bB.kind) then
+ bB.claimed = true
+ end
 																	bE = 61
 																elseif bE == 3691 then
 																	local aCE = br.t
@@ -103345,6 +103483,7 @@ while true do
 												end
 											end
 											co.applyset = function(U, c1)
+												if multiMainEnabled(cm) then return end
 												local a5, bw, aZ, bH, a9, bv, bC, a0, bq, bm, bo, bx =
 													nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 												local bu = nil
@@ -113088,6 +113227,7 @@ while true do
 												})
 											end
 											bv = function(aa, cK)
+ local eventKey = roomEventKey(cm, aa, cK)
 												local aZ = nil
 												local aJN = dc
 												local aJO = db
@@ -113100,10 +113240,10 @@ while true do
 														elseif aZ < 8924 then
 															break
 														elseif aZ < 8925. then
-															co.events[aa].claimed = true
+															co.events[eventKey].claimed = true
 															aZ = 2
 														elseif aZ == 8925. then
-															aJN[33.]({ ["t"] = "take", ["job"] = aa })
+															aJN[33.]({ ["t"] = "take", ["job"] = aa, ["kind"] = cK, ["by"] = ct.Name })
 															aZ = 0.
 														else
 															aZ = 16204
@@ -113112,7 +113252,7 @@ while true do
 													elseif aZ < 15812 then
 														if aZ < 15558. then
 															if aZ == 8926 then
-																aZ = if co.events[aa] then 1 else 2
+																aZ = if co.events[eventKey] then 1 else 2
 															else
 																break
 															end
@@ -113125,6 +113265,8 @@ while true do
 												end
 											end
 											dc[100] = function(ac, cD)
+												local assigned = multiMainTarget(cm, ac)
+	if multiMainEnabled(cm) and assigned ~= multiMainName(ct.Name) then return {} end
 												local bf, bD, bj, bE, a9, bH, a_, bk, bB, bI =
 													nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 												local aX = nil
@@ -114835,7 +114977,7 @@ while true do
 																				br = if true then 5 else 11
 																			end
 																		elseif br < 3. then
-																			bv(a7.job)
+																			bv(a7.job, af)
 																			local aK6 = a7.field
 																			cp("Joining " .. aK6)
 																			aK6 = a7.field
@@ -114846,7 +114988,7 @@ while true do
 																			br = 1
 																		else
 																			aK2[2059](bQ.TeleportCancel, bQ)
-																			br = if co.events[a7.job] then 7 else 15.
+																			br = if co.events[roomEventKey(cm, a7.job, af)] then 7 else 15.
 																		end
 																	elseif br < 6. then
 																		if br < 5 then
@@ -114860,7 +115002,7 @@ while true do
 																	elseif br < 7 then
 																		br = if a1 then 8 else 16
 																	elseif br < 8 then
-																		co.events[a7.job].claimed = false
+																		co.events[roomEventKey(cm, a7.job, af)].claimed = false
 																		br = 15.
 																	else
 																		br = if a1 then 9. else 13
@@ -126036,6 +126178,7 @@ while true do
 												end
 											end
 											dc[66.] = function(cU, ca, da)
+												if multiMainEnabled(cm) then return multiMainName(ct.Name) == multiMainTarget(cm, "spr") and "sprouts" or "vichop" end
 												local ar = nil
 												local bf = nil
 												local aRs = db
@@ -129167,6 +129310,7 @@ while true do
 											end
 											dc[19] = nil
 											dc[2] = function(bK)
+												applyMultiMainRole(cm, ct.Name)
 												local bu, aU, bF, ba, bG, bw, aX, aF, aA, bi, bq, aN, a4 =
 													nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 												local bc = nil
@@ -129256,6 +129400,11 @@ while true do
 																	end
 																elseif bc == 4658 then
 																	aU = aX
+																		if multiMainEnabled(cm) and cm.alt then
+		aU = function(token)
+			runMultiMainScout(token, b_, cm, dc[95], bZ, bS, dc[46], b5, b3, b4, bb)
+		end
+	end
 																	local aTv = 4
 																	local aTw = cj[aTv]
 																	local aTx = bF
@@ -156995,6 +157144,25 @@ while true do
 																			end
 																		end)
 																		bH, aS = nil, nil
+																		local function addMainNameField(key, label)
+	local input = bB:Clone()
+	input.Text = cm[key]
+	input.PlaceholderText = label
+	input.LayoutOrder = aj()
+	input.Parent = bF
+	input.FocusLost:Connect(function()
+		local name = input.Text:match("^%s*(.-)%s*$")
+		input.Text = name
+		if name ~= cm[key] then
+			bj(function()
+				cm[key] = name
+				applyMultiMainRole(cm, ct.Name)
+			end)
+		end
+	end)
+end
+addMainNameField("viciousmain", "Vicious main username")
+addMainNameField("sproutmain", "Sprout main username")
 																		bH = aP(aK(bF, "Main account"), function()
 																			return cm.main
 																		end, function(Y)
@@ -162659,6 +162827,8 @@ while true do
 										["dangermobs"] = bdk,
 										["room"] = bds,
 										["main"] = false,
+ ["viciousmain"] = "",
+ ["sproutmain"] = "",
 										["alt"] = false,
 										["relay"] = bdt,
 										["autoresume"] = true,
@@ -174162,8 +174332,8 @@ while true do
 																	bkO = bi5[1583]
 																	bkN = co.events
 																	J = false
-																	for V in bkO(bkN) do
-																		aq = V
+																	for V, report in bkO(bkN) do
+																		aq = report.job
 																		local I = aq
 																		local Q = nil
 																		Q = 1
