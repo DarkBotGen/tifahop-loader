@@ -58,7 +58,7 @@ end
 
 local ranks = {rare = 2, epic = 4, legendary = 4, supreme = 4}
 local excluded = {gummy = true, moon = true, basic = true, common = true, festive = true, sticker = true, debug = true}
-local rarityKeys = {"Rarity", "SproutType", "Type"}
+local rarityKeys = {"Rarity", "SproutRarity", "SproutType", "Type"}
 
 local function rarityRank(value)
     if type(value) ~= "string" then return nil end
@@ -84,15 +84,26 @@ end
 
 local function allowedSproutRank(sprout, part)
     local rank = readRank(sprout)
-    if not rank and part and part ~= sprout then rank = readRank(part) end
-    if rank then return rank > 0 and rank or nil end
+    if rank == nil and part and part ~= sprout then rank = readRank(part) end
+    if rank == nil then
+        local ok, attributes = pcall(function() return sprout:GetAttributes() end)
+        if ok and type(attributes) == "table" then
+            for key, value in pairs(attributes) do
+                if type(key) == "string" and key:lower():find("rarity", 1, true) then
+                    rank = rarityRank(value)
+                    if rank ~= nil then break end
+                end
+            end
+        end
+    end
+    if rank ~= nil then return rank > 0 and rank or nil, true end
     if not part then return nil end
     local ok, brick = pcall(function()
         local value = part.BrickColor
         return type(value) == "string" and value or value.Name
     end)
     if ok then
-        if brick == "Alder" or brick == "Medium blue" or brick == "Sage green" then return nil end
+        if brick == "Alder" or brick == "Medium blue" or brick == "Sage green" then return nil, true end
         if brick == "Light grey metallic" then return 2 end
     end
     local colorOk, color = pcall(function() return part.Color end)
@@ -109,7 +120,7 @@ local function allowedSproutRank(sprout, part)
         return 2
     end
     local transparent, alpha = pcall(function() return part.Transparency end)
-    if transparent and type(alpha) == "number" and alpha > 0.05 then return nil end
+    if transparent and type(alpha) == "number" and alpha > 0.05 then return nil, true end
     local gold = r >= 0.75 and g >= 0.5 and b <= 0.35 and r >= g
     local teal = g >= 0.55 and b >= 0.43 and r <= 0.42 and g >= b * 0.86
     local brightGreen = materialOk and material == "Neon" and g >= 0.75 and g - r >= 0.32 and g - b >= 0.32
@@ -161,7 +172,27 @@ local function resolveField(sprout, part, zones)
     return "?"
 end
 
-local function findSprout(handled)
+local function inspectSprout(sprout, part)
+    local target = part or sprout
+    local fields = {}
+    for _, property in ipairs({"BrickColor", "Color", "Material", "Transparency"}) do
+        local ok, value = pcall(function() return target[property] end)
+        fields[#fields + 1] = property .. "=" .. (ok and value ~= nil and tostring(value) or "unavailable")
+    end
+    local keys = {}
+    local ok, attributes = pcall(function() return sprout:GetAttributes() end)
+    if ok and type(attributes) == "table" then
+        for key in pairs(attributes) do
+            if type(key) == "string" then keys[#keys + 1] = key end
+            if #keys >= 12 then break end
+        end
+        table.sort(keys)
+    end
+    print("[Sprout Scout] Unidentified sprout properties: " .. table.concat(fields, ", ")
+        .. "; attribute names: " .. (#keys > 0 and table.concat(keys, ", ") or "none exposed"))
+end
+
+local function findSprout(handled, inspected)
     local sprouts = world:FindFirstChild("Sprouts")
     if not sprouts then return nil, nil, nil, nil end
     local best, level, bestPart
@@ -170,7 +201,35 @@ local function findSprout(handled)
         if not handled[sprout] and (sprout.Name == "Sprout" or rarityRank(sprout.Name)) then
             local part = sprout:IsA("BasePart") and sprout or sprout:FindFirstChildWhichIsA("BasePart", true)
             visible += 1
-            local rank = allowedSproutRank(sprout, part)
+            local rank, classified = allowedSproutRank(sprout, part)
+            if not rank and not classified and part ~= sprout then
+                local ok, children = pcall(function() return sprout:GetChildren() end)
+                if ok then
+                    for _, child in ipairs(children) do
+                        if child ~= part and child:IsA("BasePart") then
+                            local childRank, known
+                            if child.Name == "SproutCenter" then
+                                childRank, known = allowedSproutRank(child, child)
+                            else
+                                local metadata = readRank(child)
+                                known = metadata ~= nil
+                                childRank = known and metadata > 0 and metadata or nil
+                            end
+                            if known and not childRank then
+                                classified = true
+                                rank = nil
+                                break
+                            elseif childRank then
+                                rank, part = childRank, child
+                            end
+                        end
+                    end
+                end
+            end
+            if not rank and not classified and not inspected.done then
+                inspected.done = true
+                inspectSprout(sprout, part)
+            end
             if rank and (not level or rank > level) then
                 best, level, bestPart = sprout, rank, part
                 if rank == 4 then break end
@@ -286,11 +345,12 @@ local function scout()
     local nextHop = os.clock() + math.random(0, 12)
     local handled = setmetatable({}, {__mode = "k"})
     local nextScanLog = os.clock()
+    local inspected = {}
     while true do
         local start = os.clock()
         local sprout, level, field, visible
         repeat
-            sprout, level, field, visible = findSprout(handled)
+            sprout, level, field, visible = findSprout(handled, inspected)
             if not sprout then task.wait(1) end
         until sprout or os.clock() - start >= SCAN_SECONDS
 
