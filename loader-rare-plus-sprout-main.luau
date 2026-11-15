@@ -27,8 +27,6 @@ local function allowedSproutRank(sprout)
         if brick == "Alder" or brick == "Medium blue" or brick == "Sage green" then return nil end
         if brick == "Light grey metallic" then return 2 end
     end
-    local transparent, alpha = pcall(function() return part.Transparency end)
-    if transparent and type(alpha) == "number" and alpha > 0.05 then return nil end
     local colorOk, color = pcall(function() return part.Color end)
     if not colorOk or not color then
         if not ok then return nil end
@@ -42,6 +40,8 @@ local function allowedSproutRank(sprout)
         and math.abs(g - 0.654902) < 0.06 and math.abs(b - 0.662745) < 0.06 then
         return 2
     end
+    local transparent, alpha = pcall(function() return part.Transparency end)
+    if transparent and type(alpha) == "number" and alpha > 0.05 then return nil end
     local gold = r >= 0.75 and g >= 0.5 and b <= 0.35 and r >= g
     local teal = g >= 0.55 and b >= 0.43 and r <= 0.42 and g >= b * 0.86
     local brightGreen = materialOk and material == "Neon" and g >= 0.75 and g - r >= 0.32 and g - b >= 0.32
@@ -62,10 +62,10 @@ if ac == "spr" then
     dc[40]()
     local now, reports = os.time(), {}
     for _, report in pairs(co.events) do
-        if report.kind == "spr" and (report.lvl == 2 or report.lvl == 4)
+        if report.kind == "spr" and (report.lvl == 0 or report.lvl == 2 or report.lvl == 4)
             and report.job ~= game.JobId and not report.claimed and type(report.last) == "number" then
             local age = now - report.last
-            if age >= -15 and age <= 240 then
+            if age >= -15 and age <= (report.lvl == 0 and 45 or 240) then
                 table.insert(reports, {
                     job = report.job, field = report.field or "?", gifted = false, lvl = report.lvl, age = age,
                 })
@@ -77,10 +77,10 @@ if ac == "spr" then
         return left.age < right.age
     end)
     if #reports > 0 then
-        print(("[NovaHop] %d eligible Sprout relay report(s). Next field: %s"):format(#reports, reports[1].field))
+        print(("[NovaHop] %d Sprout relay lead(s). Next field: %s"):format(#reports, reports[1].field))
     elseif os.clock() >= (co.nextSproutStatusLog or 0) then
         co.nextSproutStatusLog = os.clock() + 30
-        print("[NovaHop] No fresh Rare+ Sprout reports in room " .. cm.room)
+        print("[NovaHop] No fresh Rare+ Sprout reports or unverified leads in room " .. cm.room)
     end
     return reports
 end

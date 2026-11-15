@@ -1,5 +1,5 @@
 -- Standalone NovaHop Sprout scout. Execute this file directly or use loadstring.
-local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v10/SproutScout.luau"
+local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v11/SproutScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
@@ -86,7 +86,7 @@ local function allowedSproutRank(sprout, part)
     local rank = readRank(sprout)
     if not rank and part and part ~= sprout then rank = readRank(part) end
     if rank then return rank > 0 and rank or nil end
-    if not part then return nil end
+    if not part then return 0 end
     local ok, brick = pcall(function() return part.BrickColor.Name end)
     if ok then
         if brick == "Alder" or brick == "Medium blue" or brick == "Sage green" then return nil end
@@ -94,9 +94,9 @@ local function allowedSproutRank(sprout, part)
     end
     local colorOk, color = pcall(function() return part.Color end)
     if not colorOk or not color then
-        if not ok then return nil end
+        if not ok then return 0 end
         local brickOk, brickColor = pcall(function() return part.BrickColor.Color end)
-        if not brickOk or not brickColor then return nil end
+        if not brickOk or not brickColor then return 0 end
         color = brickColor
     end
     local r, g, b = color.R, color.G, color.B
@@ -194,8 +194,15 @@ local function scout()
         warn("[Sprout Scout] Re-run this script after each hop if your launcher does not auto-execute it.")
     end
     local roomUrl = RELAY .. "/nh_" .. ROOM
+    local cachePath = "NovaHopScout_" .. tostring(player.UserId) .. "_servers.json"
+    local saved
+    if type(readfile) == "function" then
+        local ok, state = pcall(function() return http:JSONDecode(readfile(cachePath)) end)
+        if ok and type(state) == "table" then saved = state end
+    end
+    local visited = env.NovaHopScoutRecent or (saved and saved.recent)
     local recent = {}
-    for job, stamp in pairs(env.NovaHopScoutRecent or {}) do
+    for job, stamp in pairs(type(visited) == "table" and visited or {}) do
         if type(job) == "string" and #job <= 64 and type(stamp) == "number" and os.time() - stamp < 300 then
             recent[job] = stamp
         end
@@ -207,7 +214,14 @@ local function scout()
     -- Carry a bounded batch across queued teleports. Refresh once it ages out.
     local candidates = {}
     local batchTime = 0
-    local previous = env.NovaHopScoutBatch
+    local previous = env.NovaHopScoutBatch or (saved and saved.batch)
+    local function saveServerState()
+        if type(writefile) == "function" then
+            pcall(function()
+                writefile(cachePath, http:JSONEncode({recent = recent, batch = {at = batchTime, ids = candidates}}))
+            end)
+        end
+    end
     if type(previous) == "table" and type(previous.at) == "number"
         and os.time() - previous.at < 120 and type(previous.ids) == "table" then
         batchTime = previous.at
@@ -248,6 +262,7 @@ local function scout()
         local job = table.remove(candidates, math.random(#candidates))
         recent[job] = os.time()
         env.NovaHopScoutBatch = {at = batchTime, ids = candidates}
+        saveServerState()
         if queue and not queued then
             local visits, ids = {}, {}
             for id, stamp in pairs(recent) do
@@ -280,15 +295,15 @@ local function scout()
             if visible == nil then
                 print("[Sprout Scout] Sprouts folder is not visible in this server.")
             else
-                print(("[Sprout Scout] Scanned this server: %d unhandled sprouts visible, none classified as Rare+."):format(visible))
+                print(("[Sprout Scout] Scanned this server: %d unhandled sprouts visible, no Rare+ or unverified leads."):format(visible))
             end
             nextScanLog = os.clock() + 45
         end
 
         if sprout and mainIsHere() then handled[sprout] = true end
         if sprout and not handled[sprout] then
-            print(("[Sprout Scout] Found %s sprout in %s. Sending report."):format(level == 2 and "Rare" or "Epic+", field))
-            local deadline = os.clock() + HANDOFF_SECONDS
+            print(("[Sprout Scout] Found %s sprout in %s. Sending report."):format(level == 0 and "unverified" or level == 2 and "Rare" or "Epic+", field))
+            local deadline = os.clock() + (level == 0 and 35 or HANDOFF_SECONDS)
             local report = http:JSONEncode({
                 t = "spr", job = game.JobId, lvl = level, gifted = false, field = field, by = player.Name,
             })
