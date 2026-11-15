@@ -1,5 +1,5 @@
 -- Standalone NovaHop Sprout scout. Execute this file directly or use loadstring.
-local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v5/SproutScout.luau"
+local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v6/SproutScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
@@ -166,6 +166,29 @@ local function scout()
     if not queue then
         warn("[Sprout Scout] Re-run this script after each hop if your launcher does not auto-execute it.")
     end
+    local roomUrl = RELAY .. "/nh_" .. ROOM
+    local presence = http:JSONEncode({
+        t = "here",
+        nonce = ("%d-%d"):format(os.time(), math.random(1, 999999999)),
+        name = player.Name,
+        role = "alt",
+        mode = "sprouts",
+        job = game.JobId,
+    })
+    local nextPresence = 0
+    local presenceAnnounced = false
+    local function publishPresence()
+        if os.clock() < nextPresence then return end
+        local sent, failure, retryAfter = fetch(roomUrl, "POST", presence)
+        nextPresence = os.clock() + math.max(30, retryAfter or 0) + math.random(0, 5)
+        if not sent then
+            warn("[Sprout Scout] Room presence failed: " .. tostring(failure))
+        elseif not presenceAnnounced then
+            print("[Sprout Scout] Announced online in room " .. ROOM)
+            presenceAnnounced = true
+        end
+    end
+
     local recent = {}
     for job, stamp in pairs(env.NovaHopScoutRecent or {}) do
         if type(job) == "string" and #job <= 64 and type(stamp) == "number" and os.time() - stamp < 300 then
@@ -222,6 +245,7 @@ local function scout()
         local start = os.clock()
         local sprout, level, field
         repeat
+            publishPresence()
             sprout, level, field = findSprout()
             if not sprout then task.wait(0.5) end
         until sprout or os.clock() - start >= SCAN_SECONDS
@@ -233,7 +257,8 @@ local function scout()
             })
             local announced = false
             repeat
-                local posted, failure = fetch(RELAY .. "/nh_" .. ROOM, "POST", report)
+                publishPresence()
+                local posted, failure = fetch(roomUrl, "POST", report)
                 if posted and not announced then
                     print("[Sprout Scout] Reported " .. field .. ". Waiting for " .. MAIN)
                     announced = true
