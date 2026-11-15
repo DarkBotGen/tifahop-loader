@@ -1,5 +1,5 @@
 -- Standalone NovaHop Sprout scout. Execute this file directly or use loadstring.
-local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v3/SproutScout.luau"
+local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v4/SproutScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
@@ -44,7 +44,16 @@ local function fetch(url, method, body)
     if status and status >= 200 and status < 300 then
         return response.Body or ""
     end
-    return nil, status or "request failed"
+    local retryAfter
+    if status == 429 and type(response.Headers) == "table" then
+        for name, value in pairs(response.Headers) do
+            if type(name) == "string" and name:lower() == "retry-after" then
+                retryAfter = tonumber(value)
+                break
+            end
+        end
+    end
+    return nil, status or "request failed", retryAfter
 end
 
 local brickLevels = {
@@ -80,31 +89,59 @@ end
 local function nearestField(position, zones)
     local best, bestDistance
     for _, zone in ipairs(zones:GetChildren()) do
-        if zone:IsA("BasePart") then
+        local ok, distance = pcall(function()
+            if not zone:IsA("BasePart") then return end
             local point = zone.CFrame:PointToObjectSpace(position)
             local dx = math.max(math.abs(point.X) - zone.Size.X / 2, 0)
             local dz = math.max(math.abs(point.Z) - zone.Size.Z / 2, 0)
-            local distance = dx * dx + dz * dz
-            if not bestDistance or distance < bestDistance then
-                best, bestDistance = zone, distance
-            end
+            return dx * dx + dz * dz
+        end)
+        if not ok or distance == nil then
+            ok, distance = pcall(function()
+                local delta = position - zone.Position
+                return delta.X * delta.X + delta.Z * delta.Z
+            end)
+            if ok then distance += 10000 end
+        end
+        if ok and distance and (not bestDistance or distance < bestDistance) then
+            best, bestDistance = zone, distance
         end
     end
     return best and best.Name
 end
 
+local function resolveField(sprout, part, zones)
+    if not zones then return "?" end
+    for _, name in ipairs({"Field", "FieldName", "Zone"}) do
+        local ok, value = pcall(function() return sprout:GetAttribute(name) end)
+        if ok and type(value) == "string" and zones:FindFirstChild(value) then return value end
+    end
+    local readers = {
+        function() return part.Position end,
+        function() return part.CFrame.Position end,
+        function() return sprout:GetPivot().Position end,
+    }
+    for _, read in ipairs(readers) do
+        local ok, position = pcall(read)
+        if ok and position then
+            local field = nearestField(position, zones)
+            if field then return field end
+        end
+    end
+    return "?"
+end
+
 local function findSprout()
     local sprouts = world:FindFirstChild("Sprouts")
     local zones = world:FindFirstChild("FlowerZones")
-    if not sprouts or not zones then return end
+    if not sprouts then return end
     local best, level, field
     for _, sprout in ipairs(sprouts:GetChildren()) do
         if sprout.Name == "Sprout" then
             local part = sprout:IsA("BasePart") and sprout or sprout:FindFirstChildWhichIsA("BasePart", true)
             if part then
                 local rank = sproutLevel(part)
-                local fieldOk, name = pcall(function() return nearestField(part.Position, zones) end)
-                name = fieldOk and name or "?"
+                local name = resolveField(sprout, part, zones)
                 if not level or rank > level then
                     best, level, field = sprout, rank, name
                 end
@@ -141,8 +178,8 @@ local function scout()
         for _ = 1, 3 do
             local url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100&excludeFullGames=true"):format(game.PlaceId)
             if cursor then url ..= "&cursor=" .. http:UrlEncode(cursor) end
-            local body, failure = fetch(url, "GET")
-            if not body then return nil, "server list HTTP " .. tostring(failure) end
+            local body, failure, retryAfter = fetch(url, "GET")
+            if not body then return nil, "server list HTTP " .. tostring(failure), failure == 429, retryAfter end
             local ok, page = pcall(http.JSONDecode, http, body)
             if not ok or type(page) ~= "table" or type(page.data) ~= "table" then
                 return nil, "invalid server list"
@@ -176,6 +213,8 @@ local function scout()
     end
 
     print("[Sprout Scout] Searching room " .. ROOM .. " for " .. MAIN)
+    local rateDelay = 15
+    local nextHop = os.clock() + math.random(0, 8)
     while true do
         local start = os.clock()
         local sprout, level, field
@@ -204,9 +243,20 @@ local function scout()
             until not sprout.Parent or mainIsHere() or os.clock() >= deadline
         end
 
-        local hopping, failure = hop()
-        if not hopping then warn("[Sprout Scout] Hop unavailable: " .. tostring(failure)) end
-        task.wait(hopping and 18 or 8)
+        if os.clock() >= nextHop then
+            local hopping, failure, limited, retryAfter = hop()
+            if limited then
+                local delay = math.max(rateDelay, retryAfter or 0) + math.random(3, 12)
+                warn(("[Sprout Scout] Roblox rate limited the server list. Retrying in %.0fs."):format(delay))
+                nextHop = os.clock() + delay
+                rateDelay = math.min(rateDelay * 2, 180)
+            else
+                rateDelay = 15
+                if not hopping then warn("[Sprout Scout] Hop unavailable: " .. tostring(failure)) end
+                nextHop = os.clock() + (hopping and 18 or 8)
+            end
+        end
+        task.wait(1)
         for id, stamp in pairs(recent) do
             if id ~= game.JobId and os.time() - stamp >= 300 then recent[id] = nil end
         end
