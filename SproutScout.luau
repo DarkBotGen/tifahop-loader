@@ -1,5 +1,5 @@
 -- Standalone NovaHop Sprout scout. Execute this file directly or use loadstring.
-local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v1/SproutScout.luau"
+local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v2/SproutScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
@@ -11,10 +11,13 @@ local http = game:GetService("HttpService")
 local teleport = game:GetService("TeleportService")
 local world = game:GetService("Workspace")
 local env = getgenv()
-local keyRead, relayHeader = pcall(function()
-    return readfile("NovaHopSproutRelayKey.txt"):match("^%s*(.-)%s*$")
-end)
-assert(keyRead and relayHeader ~= "", "[Sprout Scout] Save the NovaHop relay credential in NovaHopSproutRelayKey.txt in the executor workspace.")
+local suppliedKey = ...
+local relayHeader = type(suppliedKey) == "string" and suppliedKey:match("^%s*(.-)%s*$") or ""
+if relayHeader == "" and type(readfile) == "function" then
+    local ok, saved = pcall(readfile, "NovaHopSproutRelayKey.txt")
+    if ok and type(saved) == "string" then relayHeader = saved:match("^%s*(.-)%s*$") end
+end
+assert(relayHeader ~= "", "[Sprout Scout] Pass your relay credential to the loader as a string.")
 local requestHttp = request or http_request or (syn and syn.request)
 assert(type(requestHttp) == "function", "[Sprout Scout] HTTP request is unavailable.")
 assert(game.PlaceId == 1537690962, "[Sprout Scout] Run this in Bee Swarm Simulator.")
@@ -152,7 +155,7 @@ local function scout()
                         table.insert(entries, ("[%q]=%d"):format(id, stamp))
                     end
                     queued = pcall(queue, "getgenv().NovaHopScoutRecent={" .. table.concat(entries, ",")
-                        .. "}; loadstring(game:HttpGet(" .. string.format("%q", LOADER) .. "))()")
+                        .. "}; loadstring(game:HttpGet(" .. string.format("%q", LOADER) .. "))(" .. string.format("%q", relayHeader) .. ")")
                     if not queued then warn("[Sprout Scout] Automatic restart could not be queued.") end
                 end
                 return pcall(teleport.TeleportToPlaceInstance, teleport, game.PlaceId, job, player)
