@@ -1,5 +1,5 @@
 -- Standalone NovaHop Sprout scout. Execute this file directly or use loadstring.
-local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v9/SproutScout.luau"
+local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v10/SproutScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
@@ -56,26 +56,42 @@ local function fetch(url, method, body)
     return nil, status or "request failed", retryAfter
 end
 
-local function allowedSproutRank(sprout, part)
-    local allowed = {rare = 2, epic = 4, legendary = 4, supreme = 4}
-    for _, attribute in ipairs({"Rarity", "SproutType", "Type"}) do
-        local ok, value = pcall(function() return sprout:GetAttribute(attribute) end)
-        if ok and type(value) == "string" then
-            local name = value:lower():match("^%s*(.-)%s*$"):gsub(" sprout$", "")
-            if allowed[name] then return allowed[name] end
-            if name == "gummy" or name == "moon" or name == "basic"
-                or name == "common" or name == "festive" or name == "sticker" then return nil end
-        end
-    end
+local ranks = {rare = 2, epic = 4, legendary = 4, supreme = 4}
+local excluded = {gummy = true, moon = true, basic = true, common = true, festive = true, sticker = true, debug = true}
+local rarityKeys = {"Rarity", "SproutType", "Type"}
 
+local function rarityRank(value)
+    if type(value) ~= "string" then return nil end
+    local name = value:lower():match("^%s*(.-)%s*$"):gsub(" sprout$", "")
+    return ranks[name] or (excluded[name] and 0 or nil)
+end
+
+local function readRank(instance)
+    local named = rarityRank(instance.Name)
+    if named then return named end
+    for _, key in ipairs(rarityKeys) do
+        local ok, value = pcall(function() return instance:GetAttribute(key) end)
+        local rank = ok and rarityRank(value)
+        if rank then return rank end
+        local childOk, childValue = pcall(function()
+            local child = instance:FindFirstChild(key)
+            return child and child.Value
+        end)
+        rank = childOk and rarityRank(childValue)
+        if rank then return rank end
+    end
+end
+
+local function allowedSproutRank(sprout, part)
+    local rank = readRank(sprout)
+    if not rank and part and part ~= sprout then rank = readRank(part) end
+    if rank then return rank > 0 and rank or nil end
     if not part then return nil end
     local ok, brick = pcall(function() return part.BrickColor.Name end)
     if ok then
         if brick == "Alder" or brick == "Medium blue" or brick == "Sage green" then return nil end
         if brick == "Light grey metallic" then return 2 end
     end
-    local transparent, alpha = pcall(function() return part.Transparency end)
-    if transparent and type(alpha) == "number" and alpha > 0.05 then return nil end
     local colorOk, color = pcall(function() return part.Color end)
     if not colorOk or not color then
         if not ok then return nil end
@@ -89,6 +105,8 @@ local function allowedSproutRank(sprout, part)
         and math.abs(g - 0.654902) < 0.06 and math.abs(b - 0.662745) < 0.06 then
         return 2
     end
+    local transparent, alpha = pcall(function() return part.Transparency end)
+    if transparent and type(alpha) == "number" and alpha > 0.05 then return nil end
     local gold = r >= 0.75 and g >= 0.5 and b <= 0.35 and r >= g
     local teal = g >= 0.55 and b >= 0.43 and r <= 0.42 and g >= b * 0.86
     local brightGreen = materialOk and material == "Neon" and g >= 0.75 and g - r >= 0.32 and g - b >= 0.32
@@ -146,7 +164,7 @@ local function findSprout(handled)
     local best, level, bestPart
     local visible = 0
     for _, sprout in ipairs(sprouts:GetChildren()) do
-        if sprout.Name == "Sprout" and not handled[sprout] then
+        if not handled[sprout] and (sprout.Name == "Sprout" or rarityRank(sprout.Name)) then
             local part = sprout:IsA("BasePart") and sprout or sprout:FindFirstChildWhichIsA("BasePart", true)
             visible += 1
             local rank = allowedSproutRank(sprout, part)
@@ -176,28 +194,6 @@ local function scout()
         warn("[Sprout Scout] Re-run this script after each hop if your launcher does not auto-execute it.")
     end
     local roomUrl = RELAY .. "/nh_" .. ROOM
-    local presence = http:JSONEncode({
-        t = "here",
-        nonce = ("%d-%d"):format(os.time(), math.random(1, 999999999)),
-        name = player.Name,
-        role = "alt",
-        mode = "sprouts",
-        job = game.JobId,
-    })
-    local nextPresence = 0
-    local presenceAnnounced = false
-    local function publishPresence()
-        if os.clock() < nextPresence then return end
-        local sent, failure, retryAfter = fetch(roomUrl, "POST", presence)
-        nextPresence = os.clock() + math.max(30, retryAfter or 0) + math.random(0, 5)
-        if not sent then
-            warn("[Sprout Scout] Room presence failed: " .. tostring(failure))
-        elseif not presenceAnnounced then
-            print("[Sprout Scout] Announced online in room " .. ROOM)
-            presenceAnnounced = true
-        end
-    end
-
     local recent = {}
     for job, stamp in pairs(env.NovaHopScoutRecent or {}) do
         if type(job) == "string" and #job <= 64 and type(stamp) == "number" and os.time() - stamp < 300 then
@@ -276,9 +272,8 @@ local function scout()
         local start = os.clock()
         local sprout, level, field, visible
         repeat
-            publishPresence()
             sprout, level, field, visible = findSprout(handled)
-            if not sprout then task.wait(0.5) end
+            if not sprout then task.wait(1) end
         until sprout or os.clock() - start >= SCAN_SECONDS
 
         if not sprout and os.clock() >= nextScanLog then
@@ -290,7 +285,8 @@ local function scout()
             nextScanLog = os.clock() + 45
         end
 
-        if sprout and not handled[sprout] and not mainIsHere() then
+        if sprout and mainIsHere() then handled[sprout] = true end
+        if sprout and not handled[sprout] then
             print(("[Sprout Scout] Found %s sprout in %s. Sending report."):format(level == 2 and "Rare" or "Epic+", field))
             local deadline = os.clock() + HANDOFF_SECONDS
             local report = http:JSONEncode({
@@ -298,7 +294,6 @@ local function scout()
             })
             local announced = false
             repeat
-                publishPresence()
                 local posted, failure = fetch(roomUrl, "POST", report)
                 if posted and not announced then
                     print("[Sprout Scout] Reported " .. field .. ". Waiting for " .. MAIN)
