@@ -1,5 +1,5 @@
 -- Standalone NovaHop Sprout scout. Execute this file directly or use loadstring.
-local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v7/SproutScout.luau"
+local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v8/SproutScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
@@ -141,24 +141,23 @@ local function resolveField(sprout, part, zones)
     return "?"
 end
 
-local function findSprout()
+local function findSprout(handled)
     local sprouts = world:FindFirstChild("Sprouts")
-    local zones = world:FindFirstChild("FlowerZones")
     if not sprouts then return end
-    local best, level, field
+    local best, level, bestPart
     for _, sprout in ipairs(sprouts:GetChildren()) do
-        if sprout.Name == "Sprout" then
+        if sprout.Name == "Sprout" and not handled[sprout] then
             local part = sprout:IsA("BasePart") and sprout or sprout:FindFirstChildWhichIsA("BasePart", true)
             local rank = part and allowedSproutRank(sprout)
-            if rank then
-                local name = resolveField(sprout, part, zones)
-                if not level or rank > level then
-                    best, level, field = sprout, rank, name
-                end
+            if rank and (not level or rank > level) then
+                best, level, bestPart = sprout, rank, part
+                if rank == 4 then break end
             end
         end
     end
-    return best, level, field
+    if best then
+        return best, level, resolveField(best, bestPart, world:FindFirstChild("FlowerZones"))
+    end
 end
 
 local function mainIsHere()
@@ -206,18 +205,35 @@ local function scout()
     recent[game.JobId] = os.time()
     local queued = false
 
+    -- Carry a bounded batch across queued teleports. Refresh once it ages out.
+    local candidates = {}
+    local batchTime = 0
+    local previous = env.NovaHopScoutBatch
+    if type(previous) == "table" and type(previous.at) == "number"
+        and os.time() - previous.at < 120 and type(previous.ids) == "table" then
+        batchTime = previous.at
+        for _, id in ipairs(previous.ids) do
+            if type(id) == "string" and #id <= 64 and not recent[id] then
+                table.insert(candidates, id)
+            end
+            if #candidates >= 16 then break end
+        end
+    end
+    local cursor
+
     local function hop()
-        local cursor
-        for _ = 1, 3 do
+        if os.time() - batchTime >= 120 then table.clear(candidates) end
+        if #candidates == 0 then
             local url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100&excludeFullGames=true"):format(game.PlaceId)
             if cursor then url ..= "&cursor=" .. http:UrlEncode(cursor) end
             local body, failure, retryAfter = fetch(url, "GET")
             if not body then return nil, "server list HTTP " .. tostring(failure), failure == 429, retryAfter end
             local ok, page = pcall(http.JSONDecode, http, body)
             if not ok or type(page) ~= "table" or type(page.data) ~= "table" then
+                cursor = nil
                 return nil, "invalid server list"
             end
-            local candidates = {}
+            cursor = type(page.nextPageCursor) == "string" and page.nextPageCursor ~= "" and page.nextPageCursor or nil
             for _, server in ipairs(page.data) do
                 if type(server.id) == "string" and #server.id <= 64 and not recent[server.id]
                     and type(server.playing) == "number" and type(server.maxPlayers) == "number"
@@ -225,39 +241,43 @@ local function scout()
                     table.insert(candidates, server.id)
                 end
             end
-            if #candidates > 0 then
-                local job = candidates[math.random(#candidates)]
-                recent[job] = os.time()
-                if queue and not queued then
-                    local entries = {}
-                    for id, stamp in pairs(recent) do
-                        table.insert(entries, ("[%q]=%d"):format(id, stamp))
-                    end
-                    queued = pcall(queue, "getgenv().NovaHopScoutRecent={" .. table.concat(entries, ",")
-                        .. "}; loadstring(game:HttpGet(" .. string.format("%q", LOADER) .. "))(" .. string.format("%q", relayHeader) .. ")")
-                    if not queued then warn("[Sprout Scout] Automatic restart could not be queued.") end
-                end
-                return pcall(teleport.TeleportToPlaceInstance, teleport, game.PlaceId, job, player)
-            end
-            cursor = page.nextPageCursor
-            if type(cursor) ~= "string" or cursor == "" then break end
+            while #candidates > 16 do table.remove(candidates, math.random(#candidates)) end
+            batchTime = os.time()
         end
-        return nil, "no eligible server in the pages checked"
+        if #candidates == 0 then return nil, "no eligible server on this page" end
+
+        local job = table.remove(candidates, math.random(#candidates))
+        recent[job] = os.time()
+        env.NovaHopScoutBatch = {at = batchTime, ids = candidates}
+        if queue and not queued then
+            local visits, ids = {}, {}
+            for id, stamp in pairs(recent) do
+                table.insert(visits, ("[%q]=%d"):format(id, stamp))
+            end
+            for _, id in ipairs(candidates) do table.insert(ids, ("%q"):format(id)) end
+            local resume = ("local e=getgenv();e.NovaHopScoutRecent={%s};e.NovaHopScoutBatch={at=%d,ids={%s}};loadstring(game:HttpGet(%q))(%q)")
+                :format(table.concat(visits, ","), batchTime, table.concat(ids, ","), LOADER, relayHeader)
+            local ok, result = pcall(queue, resume)
+            queued = ok and result ~= false
+            if not queued then warn("[Sprout Scout] Automatic restart could not be queued.") end
+        end
+        return pcall(teleport.TeleportToPlaceInstance, teleport, game.PlaceId, job, player)
     end
 
     print("[Sprout Scout] Searching room " .. ROOM .. " for " .. MAIN)
     local rateDelay = 15
-    local nextHop = os.clock() + math.random(0, 8)
+    local nextHop = os.clock() + math.random(0, 12)
+    local handled = setmetatable({}, {__mode = "k"})
     while true do
         local start = os.clock()
         local sprout, level, field
         repeat
             publishPresence()
-            sprout, level, field = findSprout()
+            sprout, level, field = findSprout(handled)
             if not sprout then task.wait(0.5) end
         until sprout or os.clock() - start >= SCAN_SECONDS
 
-        if sprout and not mainIsHere() then
+        if sprout and not handled[sprout] and not mainIsHere() then
             local deadline = os.clock() + HANDOFF_SECONDS
             local report = http:JSONEncode({
                 t = "spr", job = game.JobId, lvl = level, gifted = false, field = field, by = player.Name,
@@ -276,6 +296,7 @@ local function scout()
                 repeat task.wait(0.5)
                 until not sprout.Parent or mainIsHere() or os.clock() >= math.min(retry, deadline)
             until not sprout.Parent or mainIsHere() or os.clock() >= deadline
+            if announced or mainIsHere() then handled[sprout] = true end
         end
 
         if os.clock() >= nextHop then
@@ -288,7 +309,7 @@ local function scout()
             else
                 rateDelay = 15
                 if not hopping then warn("[Sprout Scout] Hop unavailable: " .. tostring(failure)) end
-                nextHop = os.clock() + (hopping and 18 or 8)
+                nextHop = os.clock() + (hopping and 18 or (8 + math.random(0, 5)))
             end
         end
         task.wait(1)
