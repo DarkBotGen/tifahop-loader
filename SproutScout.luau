@@ -1,5 +1,5 @@
 -- Standalone NovaHop Sprout scout. Execute this file directly or use loadstring.
-local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v11/SproutScout.luau"
+local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v12/SproutScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
@@ -86,17 +86,20 @@ local function allowedSproutRank(sprout, part)
     local rank = readRank(sprout)
     if not rank and part and part ~= sprout then rank = readRank(part) end
     if rank then return rank > 0 and rank or nil end
-    if not part then return 0 end
-    local ok, brick = pcall(function() return part.BrickColor.Name end)
+    if not part then return nil end
+    local ok, brick = pcall(function()
+        local value = part.BrickColor
+        return type(value) == "string" and value or value.Name
+    end)
     if ok then
         if brick == "Alder" or brick == "Medium blue" or brick == "Sage green" then return nil end
         if brick == "Light grey metallic" then return 2 end
     end
     local colorOk, color = pcall(function() return part.Color end)
     if not colorOk or not color then
-        if not ok then return 0 end
+        if not ok then return nil end
         local brickOk, brickColor = pcall(function() return part.BrickColor.Color end)
-        if not brickOk or not brickColor then return 0 end
+        if not brickOk or not brickColor then return nil end
         color = brickColor
     end
     local r, g, b = color.R, color.G, color.B
@@ -295,15 +298,15 @@ local function scout()
             if visible == nil then
                 print("[Sprout Scout] Sprouts folder is not visible in this server.")
             else
-                print(("[Sprout Scout] Scanned this server: %d unhandled sprouts visible, no Rare+ or unverified leads."):format(visible))
+                print(("[Sprout Scout] Scanned this server: %d unhandled sprouts visible, none confirmed Rare+."):format(visible))
             end
             nextScanLog = os.clock() + 45
         end
 
         if sprout and mainIsHere() then handled[sprout] = true end
         if sprout and not handled[sprout] then
-            print(("[Sprout Scout] Found %s sprout in %s. Sending report."):format(level == 0 and "unverified" or level == 2 and "Rare" or "Epic+", field))
-            local deadline = os.clock() + (level == 0 and 35 or HANDOFF_SECONDS)
+            print(("[Sprout Scout] Found %s sprout in %s. Sending report."):format(level == 2 and "Rare" or "Epic+", field))
+            local deadline = os.clock() + HANDOFF_SECONDS
             local report = http:JSONEncode({
                 t = "spr", job = game.JobId, lvl = level, gifted = false, field = field, by = player.Name,
             })

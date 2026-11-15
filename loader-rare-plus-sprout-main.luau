@@ -8,21 +8,42 @@ end
 local source = table.concat(parts)
 local marker = "local ownerDashboardSeed"
 local filter = [==[
-local function allowedSproutRank(sprout)
-    local allowed = {rare = 2, epic = 4, legendary = 4, supreme = 4}
-    for _, attribute in ipairs({"Rarity", "SproutType", "Type"}) do
-        local ok, value = pcall(function() return sprout:GetAttribute(attribute) end)
-        if ok and type(value) == "string" then
-            local name = value:lower():match("^%s*(.-)%s*$"):gsub(" sprout$", "")
-            if allowed[name] then return allowed[name] end
-            if name == "gummy" or name == "moon" or name == "basic"
-                or name == "common" or name == "festive" or name == "sticker" then return nil end
-        end
-    end
+local ranks = {rare = 2, epic = 4, legendary = 4, supreme = 4}
+local excluded = {gummy = true, moon = true, basic = true, common = true, festive = true, sticker = true, debug = true}
+local rarityKeys = {"Rarity", "SproutType", "Type"}
 
+local function rarityRank(value)
+    if type(value) ~= "string" then return nil end
+    local name = value:lower():match("^%s*(.-)%s*$"):gsub(" sprout$", "")
+    return ranks[name] or (excluded[name] and 0 or nil)
+end
+
+local function readRank(instance)
+    local named = rarityRank(instance.Name)
+    if named then return named end
+    for _, key in ipairs(rarityKeys) do
+        local ok, value = pcall(function() return instance:GetAttribute(key) end)
+        local rank = ok and rarityRank(value)
+        if rank then return rank end
+        local childOk, childValue = pcall(function()
+            local child = instance:FindFirstChild(key)
+            return child and child.Value
+        end)
+        rank = childOk and rarityRank(childValue)
+        if rank then return rank end
+    end
+end
+
+local function allowedSproutRank(sprout)
     local part = sprout:IsA("BasePart") and sprout or sprout:FindFirstChildWhichIsA("BasePart", true)
+    local rank = readRank(sprout)
+    if not rank and part and part ~= sprout then rank = readRank(part) end
+    if rank then return rank > 0 and rank or nil end
     if not part then return nil end
-    local ok, brick = pcall(function() return part.BrickColor.Name end)
+    local ok, brick = pcall(function()
+        local value = part.BrickColor
+        return type(value) == "string" and value or value.Name
+    end)
     if ok then
         if brick == "Alder" or brick == "Medium blue" or brick == "Sage green" then return nil end
         if brick == "Light grey metallic" then return 2 end
@@ -62,10 +83,10 @@ if ac == "spr" then
     dc[40]()
     local now, reports = os.time(), {}
     for _, report in pairs(co.events) do
-        if report.kind == "spr" and (report.lvl == 0 or report.lvl == 2 or report.lvl == 4)
+        if report.kind == "spr" and (report.lvl == 2 or report.lvl == 4)
             and report.job ~= game.JobId and not report.claimed and type(report.last) == "number" then
             local age = now - report.last
-            if age >= -15 and age <= (report.lvl == 0 and 45 or 240) then
+            if age >= -15 and age <= 240 then
                 table.insert(reports, {
                     job = report.job, field = report.field or "?", gifted = false, lvl = report.lvl, age = age,
                 })
@@ -80,7 +101,7 @@ if ac == "spr" then
         print(("[NovaHop] %d Sprout relay lead(s). Next field: %s"):format(#reports, reports[1].field))
     elseif os.clock() >= (co.nextSproutStatusLog or 0) then
         co.nextSproutStatusLog = os.clock() + 30
-        print("[NovaHop] No fresh Rare+ Sprout reports or unverified leads in room " .. cm.room)
+        print("[NovaHop] No fresh Rare+ Sprout reports in room " .. cm.room)
     end
     return reports
 end
