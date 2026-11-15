@@ -1,5 +1,5 @@
 -- Standalone NovaHop Sprout scout. Execute this file directly or use loadstring.
-local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v2/SproutScout.luau"
+local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v3/SproutScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
@@ -60,13 +60,21 @@ local appearance = {
 }
 
 local function sproutLevel(part)
-    local style = appearance[part.Material.Name]
-    local color = part.Color
-    if style and math.abs(color.R - style[1]) < 0.06
-        and math.abs(color.G - style[2]) < 0.06 and math.abs(color.B - style[3]) < 0.06 then
-        return style[4]
-    end
-    return brickLevels[part.BrickColor.Name] or 4
+    local colorOk, rank = pcall(function()
+        local style = appearance[part.Material.Name]
+        if not style then return end
+        local color = part.Color
+        if math.abs(color.R - style[1]) < 0.06 and math.abs(color.G - style[2]) < 0.06
+            and math.abs(color.B - style[3]) < 0.06 then
+            return style[4]
+        end
+    end)
+    if colorOk and rank then return rank end
+
+    local brickOk, brickRank = pcall(function()
+        return brickLevels[part.BrickColor.Name] or 4
+    end)
+    return brickOk and brickRank or 0
 end
 
 local function nearestField(position, zones)
@@ -95,8 +103,9 @@ local function findSprout()
             local part = sprout:IsA("BasePart") and sprout or sprout:FindFirstChildWhichIsA("BasePart", true)
             if part then
                 local rank = sproutLevel(part)
-                local name = nearestField(part.Position, zones)
-                if name and (not level or rank > level) then
+                local fieldOk, name = pcall(function() return nearestField(part.Position, zones) end)
+                name = fieldOk and name or "?"
+                if not level or rank > level then
                     best, level, field = sprout, rank, name
                 end
             end
