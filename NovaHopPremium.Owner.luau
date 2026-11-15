@@ -7848,7 +7848,11 @@ while true do
 													end
 												end
 											end
-											dc[16] = dc[117.]("VirtualInputManager")
+											local inputAvailable, virtualInput = pcall(dc[117.], "VirtualInputManager")
+dc[16] = inputAvailable and virtualInput or nil
+if not dc[16] then
+	warn("[NovaHop] VirtualInputManager unavailable. Simulated mouse and key actions are disabled.")
+end
 											ba = { [1] = nil, [2] = nil }
 											bz = function()
 												local aP = nil
@@ -8564,8 +8568,8 @@ while true do
 											a_[1] = function()
 												local hG = dc
 												local hH = db
-												hG[16]:SendMouseButtonEvent(0., 0., 0., true, ct, 1)
-												hG[16]:SendMouseButtonEvent(0., 0., 0., false, ct, 1)
+												if hG[16] then hG[16]:SendMouseButtonEvent(0., 0., 0., true, ct, 1) end
+												if hG[16] then hG[16]:SendMouseButtonEvent(0., 0., 0., false, ct, 1) end
 												bX.Heartbeat:Wait()
 											end
 											a_[2] = function(M, Q)
@@ -8579,7 +8583,7 @@ while true do
 														if aI < 3756. then
 															break
 														elseif aI < 3757 then
-															hI[16]:SendKeyEvent(true, M, false, ct)
+															if hI[16] then hI[16]:SendKeyEvent(true, M, false, ct) end
 															aI = if Q then 1 else 0.
 														elseif aI < 3758 then
 															break
@@ -8591,7 +8595,7 @@ while true do
 													elseif aI < 10725. then
 														if aI < 4761. then
 															if aI == 3759. then
-																hI[16]:SendKeyEvent(false, M, false, ct)
+																if hI[16] then hI[16]:SendKeyEvent(false, M, false, ct) end
 																bX.Heartbeat:Wait()
 																aI = 2
 															else
@@ -93978,7 +93982,11 @@ addMainNameField("sproutmain", "Sprout main username")
 														end
 													end
 												end
-												dc[16] = dc[117.]("VirtualInputManager")
+												local inputAvailable, virtualInput = pcall(dc[117.], "VirtualInputManager")
+dc[16] = inputAvailable and virtualInput or nil
+if not dc[16] then
+	warn("[NovaHop] VirtualInputManager unavailable. Simulated mouse and key actions are disabled.")
+end
 												ba = { [1] = nil, [2] = nil }
 												bz = function()
 													local aP = nil
@@ -94712,8 +94720,8 @@ addMainNameField("sproutmain", "Sprout main username")
 												a_[1] = function()
 													local atl = dc
 													local atm = db
-													atl[16]:SendMouseButtonEvent(0., 0., 0., true, ct, 1)
-													atl[16]:SendMouseButtonEvent(0., 0., 0., false, ct, 1)
+													if atl[16] then atl[16]:SendMouseButtonEvent(0., 0., 0., true, ct, 1) end
+													if atl[16] then atl[16]:SendMouseButtonEvent(0., 0., 0., false, ct, 1) end
 													bX.Heartbeat:Wait()
 												end
 												a_[2] = function(M, Q)
@@ -94727,7 +94735,7 @@ addMainNameField("sproutmain", "Sprout main username")
 															if aI < 3756. then
 																break
 															elseif aI < 3757 then
-																atn[16]:SendKeyEvent(true, M, false, ct)
+																if atn[16] then atn[16]:SendKeyEvent(true, M, false, ct) end
 																aI = if Q then 1 else 0.
 															elseif aI < 3758 then
 																break
@@ -94739,7 +94747,7 @@ addMainNameField("sproutmain", "Sprout main username")
 														elseif aI < 10725. then
 															if aI < 4761. then
 																if aI == 3759. then
-																	atn[16]:SendKeyEvent(false, M, false, ct)
+																	if atn[16] then atn[16]:SendKeyEvent(false, M, false, ct) end
 																	bX.Heartbeat:Wait()
 																	aI = 2
 																else

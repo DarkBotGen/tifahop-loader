@@ -1,6 +1,6 @@
-local base = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/owner-chunked-v1/owner-parts/"
+local base = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/owner-chunked-v2/owner-parts/"
 local parts = {}
-for index, expectedBytes in ipairs({2910327, 2910355}) do
+for index, expectedBytes in ipairs({2910607, 2910639}) do
     local part = game:HttpGet(base .. "part-" .. index .. ".txt")
     assert(#part == expectedBytes, "NovaHop download incomplete (part " .. index .. ")")
     parts[index] = part
