@@ -1,4 +1,5 @@
 -- Standalone NovaHop Sprout scout. Execute this file directly or use loadstring.
+local BUILD = "stable-rarity-trace-2"
 local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/main/SproutScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
@@ -172,12 +173,17 @@ local function resolveField(sprout, part, zones)
     return "?"
 end
 
-local function inspectSprout(sprout, part)
+local function inspectSprout(sprout, part, classified)
     local target = part or sprout
     local fields = {}
     for _, property in ipairs({"BrickColor", "Color", "Material", "Transparency"}) do
         local ok, value = pcall(function() return target[property] end)
-        fields[#fields + 1] = property .. "=" .. (ok and value ~= nil and tostring(value) or "unavailable")
+        local display = ok and value ~= nil and tostring(value) or "unavailable"
+        if ok and (property == "BrickColor" or property == "Material") then
+            local named, name = pcall(function() return value.Name end)
+            if named and type(name) == "string" then display = name end
+        end
+        fields[#fields + 1] = property .. "=" .. display
     end
     local keys = {}
     local ok, attributes = pcall(function() return sprout:GetAttributes() end)
@@ -188,7 +194,7 @@ local function inspectSprout(sprout, part)
         end
         table.sort(keys)
     end
-    print("[Sprout Scout] Unidentified sprout properties: " .. table.concat(fields, ", ")
+    print("[Sprout Scout] Sprout check (" .. (classified and "excluded" or "unidentified") .. "): " .. table.concat(fields, ", ")
         .. "; attribute names: " .. (#keys > 0 and table.concat(keys, ", ") or "none exposed"))
 end
 
@@ -226,9 +232,9 @@ local function findSprout(handled, inspected)
                     end
                 end
             end
-            if not rank and not classified and not inspected.done then
+            if not rank and not inspected.done then
                 inspected.done = true
-                inspectSprout(sprout, part)
+                inspectSprout(sprout, part, classified)
             end
             if rank and (not level or rank > level) then
                 best, level, bestPart = sprout, rank, part
@@ -340,7 +346,7 @@ local function scout()
         return pcall(teleport.TeleportToPlaceInstance, teleport, game.PlaceId, job, player)
     end
 
-    print("[Sprout Scout] Searching room " .. ROOM .. " for " .. MAIN)
+    print("[Sprout Scout] " .. BUILD .. " searching room " .. ROOM .. " for " .. MAIN)
     local rateDelay = 15
     local nextHop = os.clock() + math.random(0, 12)
     local handled = setmetatable({}, {__mode = "k"})
