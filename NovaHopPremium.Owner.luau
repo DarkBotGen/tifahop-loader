@@ -60340,58 +60340,19 @@ while true do
 																		local UD = E[4]
 																		local UE = Lz[595].TextXAlignment.Right
 																		local UF = "-"
-																		Q = aU(
+																		local dashboardCodeLabel = aU(
 																			K,
 																			{
 																				["Size"] = UA,
 																				["Position"] = UB,
-																				["Text"] = UF,
+																				["Text"] = co.dashcode() or "-",
 																				["Font"] = UC,
 																				["TextColor3"] = UD,
 																				["TextXAlignment"] = UE,
 																			}
 																		)
 																		G[#G + 1] = function()
-																			local au = nil
-																			local a5 = nil
-																			local UG = db
-																			a5 = 3.
-																			while true do
-																				a5 = 4969 - a5
-																				if a5 < 4968. then
-																					if a5 < 3470 then
-																						break
-																					elseif a5 < 4618 then
-																						break
-																					elseif a5 < 4966 then
-																						break
-																					elseif a5 < 4967 then
-																						au = (co.dashcode())
-																						a5 = if au then 0. else 2
-																					elseif a5 == 4967 then
-																						au = "-"
-																						a5 = 0.
-																					else
-																						a5 = 3470
-																						continue
-																					end
-																				elseif a5 < 7889 then
-																					if a5 < 6852. then
-																						if a5 < 4969 then
-																							break
-																						elseif a5 == 4969 then
-																							Q.Text = au
-																							a5 = 1
-																						else
-																							break
-																						end
-																					else
-																						break
-																					end
-																				else
-																					break
-																				end
-																			end
+																			dashboardCodeLabel.Text = co.dashcode() or "-"
 																		end
 																		UD = Lz[269].new(1, 0., 0., 26)
 																		UC = Lz[595].Font.GothamMedium
@@ -148873,58 +148834,19 @@ addMainNameField("sproutmain", "Sprout main username")
 																			local a3Y = E[4]
 																			local a3Z = aVT[595].TextXAlignment.Right
 																			local a3_ = "-"
-																			Q = aU(
+																			local dashboardCodeLabel = aU(
 																				K,
 																				{
 																					["Size"] = a3V,
 																					["Position"] = a3W,
-																					["Text"] = a3_,
+																					["Text"] = co.dashcode() or "-",
 																					["Font"] = a3X,
 																					["TextColor3"] = a3Y,
 																					["TextXAlignment"] = a3Z,
 																				}
 																			)
 																			G[#G + 1] = function()
-																				local au = nil
-																				local a5 = nil
-																				local a30 = db
-																				a5 = 3.
-																				while true do
-																					a5 = 4969 - a5
-																					if a5 < 4968. then
-																						if a5 < 3470 then
-																							break
-																						elseif a5 < 4618 then
-																							break
-																						elseif a5 < 4966 then
-																							break
-																						elseif a5 < 4967 then
-																							au = (co.dashcode())
-																							a5 = if au then 0. else 2
-																						elseif a5 == 4967 then
-																							au = "-"
-																							a5 = 0.
-																						else
-																							a5 = 3470
-																							continue
-																						end
-																					elseif a5 < 7889 then
-																						if a5 < 6852. then
-																							if a5 < 4969 then
-																								break
-																							elseif a5 == 4969 then
-																								Q.Text = au
-																								a5 = 1
-																							else
-																								break
-																							end
-																						else
-																							break
-																						end
-																					else
-																						break
-																					end
-																				end
+																				dashboardCodeLabel.Text = co.dashcode() or "-"
 																			end
 																			a3Y = aVT[269].new(1, 0., 0., 26)
 																			a3X = aVT[595].Font.GothamMedium
