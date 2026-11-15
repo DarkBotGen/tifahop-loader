@@ -1,6 +1,37 @@
 -- NovaHop Premium owner edition. Execute this whole file.
 -- The embedded payload is decoded and formatted in the companion readable file.
 local ownerSource = [=[
+local ownerDashboardSeed
+
+local function dashboardSeed(config, legacyKey, http)
+	if type(legacyKey) == "string" and legacyKey ~= "" then
+		return legacyKey
+	end
+	local room = type(config.room) == "string" and config.room:match("^%s*(.-)%s*$") or ""
+	if room ~= "" then
+		return "NovaHop owner room:" .. room
+	end
+	if ownerDashboardSeed then
+		return ownerDashboardSeed
+	end
+
+	local path = "NovaHop/dashboard_seed.txt"
+	if readfile then
+		local ok, saved = pcall(readfile, path)
+		if ok and type(saved) == "string" and saved:match("^[%x%-]+$") and #saved == 36 then
+			ownerDashboardSeed = saved
+		end
+	end
+	if not ownerDashboardSeed then
+		ownerDashboardSeed = http:GenerateGUID(false)
+		if writefile then
+			pcall(writefile, path, ownerDashboardSeed)
+		end
+	end
+	return ownerDashboardSeed
+end
+
+
 local function multiMainName(value)
 	return type(value) == "string" and value:match("^%s*(.-)%s*$"):lower() or ""
 end
@@ -21159,7 +21190,7 @@ while true do
 														if bw < 8198 then
 															break
 														elseif bw == 8198 then
-															a5 = cx._nhkey
+															a5 = dashboardSeed(cm, cx._nhkey, bK)
 															bz = if a5 then 1 else 0.
 															local vP = 1 - bz
 															a_ = 2272 * bz + 2865. * vP
@@ -107722,7 +107753,7 @@ addMainNameField("sproutmain", "Sprout main username")
 															if bw < 8198 then
 																break
 															elseif bw == 8198 then
-																a5 = cx._nhkey
+																a5 = dashboardSeed(cm, cx._nhkey, bK)
 																bz = if a5 then 1 else 0.
 																local aGl = 1 - bz
 																a_ = 2272 * bz + 2865. * aGl
