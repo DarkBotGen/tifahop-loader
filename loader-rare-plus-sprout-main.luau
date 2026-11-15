@@ -57,6 +57,37 @@ replace(marker, filter .. "\n" .. marker, 1)
 replace("aY = a5%(a4%)", "aY = allowedSproutRank(bz) ~= nil", 2)
 replace("bE = bq%.kind == ac", "bE = bq.kind == ac and (ac ~= 'spr' or bq.lvl == 2 or bq.lvl == 4)", 2)
 replace("a9 = cm%.farmrare == false", "a9 = false", 2)
+local sproutReports = [==[
+if ac == "spr" then
+    dc[40]()
+    local now, reports = os.time(), {}
+    for _, report in pairs(co.events) do
+        if report.kind == "spr" and (report.lvl == 2 or report.lvl == 4)
+            and report.job ~= game.JobId and not report.claimed and type(report.last) == "number" then
+            local age = now - report.last
+            if age >= -15 and age <= 240 then
+                table.insert(reports, {
+                    job = report.job, field = report.field or "?", gifted = false, lvl = report.lvl, age = age,
+                })
+            end
+        end
+    end
+    table.sort(reports, function(left, right)
+        if left.lvl ~= right.lvl then return left.lvl > right.lvl end
+        return left.age < right.age
+    end)
+    if #reports > 0 then
+        print(("[NovaHop] %d eligible Sprout relay report(s). Next field: %s"):format(#reports, reports[1].field))
+    elseif os.clock() >= (co.nextSproutStatusLog or 0) then
+        co.nextSproutStatusLog = os.clock() + 30
+        print("[NovaHop] No fresh Rare+ Sprout reports in room " .. cm.room)
+    end
+    return reports
+end
+]==]
+local roleGuard = 'if multiMainEnabled(cm) and assigned ~= multiMainName(ct.Name) then return {} end'
+local roleGuardPattern = roleGuard:gsub("([^%w%s])", "%%%1")
+replace(roleGuardPattern, roleGuard .. "\n" .. sproutReports, 2)
 local run, reason = loadstring(source, "@NovaHopPremium.Owner")
 assert(run, reason)
 return run()

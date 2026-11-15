@@ -1,5 +1,5 @@
 -- Standalone NovaHop Sprout scout. Execute this file directly or use loadstring.
-local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v8/SproutScout.luau"
+local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v9/SproutScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
@@ -56,7 +56,7 @@ local function fetch(url, method, body)
     return nil, status or "request failed", retryAfter
 end
 
-local function allowedSproutRank(sprout)
+local function allowedSproutRank(sprout, part)
     local allowed = {rare = 2, epic = 4, legendary = 4, supreme = 4}
     for _, attribute in ipairs({"Rarity", "SproutType", "Type"}) do
         local ok, value = pcall(function() return sprout:GetAttribute(attribute) end)
@@ -68,7 +68,6 @@ local function allowedSproutRank(sprout)
         end
     end
 
-    local part = sprout:IsA("BasePart") and sprout or sprout:FindFirstChildWhichIsA("BasePart", true)
     if not part then return nil end
     local ok, brick = pcall(function() return part.BrickColor.Name end)
     if ok then
@@ -143,12 +142,14 @@ end
 
 local function findSprout(handled)
     local sprouts = world:FindFirstChild("Sprouts")
-    if not sprouts then return end
+    if not sprouts then return nil, nil, nil, nil end
     local best, level, bestPart
+    local visible = 0
     for _, sprout in ipairs(sprouts:GetChildren()) do
         if sprout.Name == "Sprout" and not handled[sprout] then
             local part = sprout:IsA("BasePart") and sprout or sprout:FindFirstChildWhichIsA("BasePart", true)
-            local rank = part and allowedSproutRank(sprout)
+            visible += 1
+            local rank = allowedSproutRank(sprout, part)
             if rank and (not level or rank > level) then
                 best, level, bestPart = sprout, rank, part
                 if rank == 4 then break end
@@ -156,8 +157,10 @@ local function findSprout(handled)
         end
     end
     if best then
-        return best, level, resolveField(best, bestPart, world:FindFirstChild("FlowerZones"))
+        local field = resolveField(best, bestPart, world:FindFirstChild("FlowerZones"))
+        return best, level, field, visible
     end
+    return nil, nil, nil, visible
 end
 
 local function mainIsHere()
@@ -268,16 +271,27 @@ local function scout()
     local rateDelay = 15
     local nextHop = os.clock() + math.random(0, 12)
     local handled = setmetatable({}, {__mode = "k"})
+    local nextScanLog = os.clock()
     while true do
         local start = os.clock()
-        local sprout, level, field
+        local sprout, level, field, visible
         repeat
             publishPresence()
-            sprout, level, field = findSprout(handled)
+            sprout, level, field, visible = findSprout(handled)
             if not sprout then task.wait(0.5) end
         until sprout or os.clock() - start >= SCAN_SECONDS
 
+        if not sprout and os.clock() >= nextScanLog then
+            if visible == nil then
+                print("[Sprout Scout] Sprouts folder is not visible in this server.")
+            else
+                print(("[Sprout Scout] Scanned this server: %d unhandled sprouts visible, none classified as Rare+."):format(visible))
+            end
+            nextScanLog = os.clock() + 45
+        end
+
         if sprout and not handled[sprout] and not mainIsHere() then
+            print(("[Sprout Scout] Found %s sprout in %s. Sending report."):format(level == 2 and "Rare" or "Epic+", field))
             local deadline = os.clock() + HANDOFF_SECONDS
             local report = http:JSONEncode({
                 t = "spr", job = game.JobId, lvl = level, gifted = false, field = field, by = player.Name,
