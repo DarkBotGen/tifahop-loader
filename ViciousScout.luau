@@ -1,11 +1,12 @@
 -- Standalone NovaHop Vicious Bee scout. Execute this file directly or use loadstring.
-local BUILD = "vicious-scout-1"
+local BUILD = "vicious-scout-2"
 local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/main/ViciousScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
-local SCAN_SECONDS = 8
-local HANDOFF_SECONDS = 75
+local SCAN_SECONDS = 3
+local REPLICATION_WAIT = 8
+local HANDOFF_SECONDS = 45
 
 local players = game:GetService("Players")
 local http = game:GetService("HttpService")
@@ -22,7 +23,7 @@ assert(relayHeader ~= "", "[Vicious Scout] Pass your relay credential to the loa
 local requestHttp = request or http_request or (syn and syn.request)
 assert(type(requestHttp) == "function", "[Vicious Scout] HTTP request is unavailable.")
 assert(game.PlaceId == 1537690962, "[Vicious Scout] Run this in Bee Swarm Simulator.")
-repeat task.wait(0.5) until players.LocalPlayer and game.JobId ~= ""
+repeat task.wait(0.2) until players.LocalPlayer and game.JobId ~= ""
 local player = players.LocalPlayer
 if player.Name:lower() == MAIN then
     warn("[Vicious Scout] Use the regular NovaHop loader on the Vicious main.")
@@ -142,9 +143,6 @@ end
 
 local function scout()
     local queue = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
-    if not queue then
-        warn("[Vicious Scout] Re-run this script after each hop if your launcher does not auto-execute it.")
-    end
     local roomUrl = RELAY .. "/nh_" .. ROOM
     local cachePath = "NovaHopViciousScout_" .. tostring(player.UserId) .. "_servers.json"
     local saved
@@ -175,7 +173,7 @@ local function scout()
         end
     end
     if type(previous) == "table" and type(previous.at) == "number"
-        and os.time() - previous.at < 120 and type(previous.ids) == "table" then
+        and os.time() - previous.at < 180 and type(previous.ids) == "table" then
         batchTime = previous.at
         for _, id in ipairs(previous.ids) do
             if type(id) == "string" and #id <= 64 and not recent[id] then
@@ -187,7 +185,7 @@ local function scout()
     local cursor
 
     local function hop()
-        if os.time() - batchTime >= 120 then table.clear(candidates) end
+        if os.time() - batchTime >= 180 then table.clear(candidates) end
         if #candidates == 0 then
             local url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100&excludeFullGames=true"):format(game.PlaceId)
             if cursor then url ..= "&cursor=" .. http:UrlEncode(cursor) end
@@ -232,22 +230,27 @@ local function scout()
 
     print("[Vicious Scout] " .. BUILD .. " searching room " .. ROOM .. " for " .. MAIN)
     local rateDelay = 15
-    local nextHop = os.clock() + math.random(0, 12)
+    local nextHop = os.clock() + math.random(0, 5)
     local handled = setmetatable({}, {__mode = "k"})
     local nextScanLog = os.clock()
     while true do
         local start = os.clock()
         local bee, level, field, visible
+        local readyAt
         repeat
             bee, level, field, visible = findVicious(handled)
-            if not bee then task.wait(1) end
-        until bee or os.clock() - start >= SCAN_SECONDS
+            if visible ~= nil then readyAt = readyAt or os.clock() end
+            if not bee then task.wait(0.25) end
+        until bee or (readyAt and os.clock() - readyAt >= SCAN_SECONDS)
+            or os.clock() - start >= REPLICATION_WAIT
 
         if not bee and os.clock() >= nextScanLog then
             if visible == nil then
                 print("[Vicious Scout] Monsters folder is not visible in this server.")
+            elseif visible == 0 then
+                print("[Vicious Scout] Scanned this server: no Vicious Bee.")
             else
-                print(("[Vicious Scout] Scanned this server: %d Vicious Bees visible with unreadable levels."):format(visible))
+                print(("[Vicious Scout] Scanned this server: %d Vicious Bees with unreadable levels."):format(visible))
             end
             nextScanLog = os.clock() + 45
         end
