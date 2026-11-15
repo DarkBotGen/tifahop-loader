@@ -1,10 +1,9 @@
 -- Standalone NovaHop Vicious Bee scout. Execute this file directly or use loadstring.
-local BUILD = "vicious-scout-2"
+local BUILD = "vicious-scout-fast-1"
 local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/main/ViciousScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
-local SCAN_SECONDS = 3
 local REPLICATION_WAIT = 8
 local HANDOFF_SECONDS = 45
 
@@ -230,19 +229,16 @@ local function scout()
 
     print("[Vicious Scout] " .. BUILD .. " searching room " .. ROOM .. " for " .. MAIN)
     local rateDelay = 15
-    local nextHop = os.clock() + math.random(0, 5)
+    local nextHop = os.clock()
     local handled = setmetatable({}, {__mode = "k"})
     local nextScanLog = os.clock()
     while true do
         local start = os.clock()
         local bee, level, field, visible
-        local readyAt
         repeat
             bee, level, field, visible = findVicious(handled)
-            if visible ~= nil then readyAt = readyAt or os.clock() end
-            if not bee then task.wait(0.25) end
-        until bee or (readyAt and os.clock() - readyAt >= SCAN_SECONDS)
-            or os.clock() - start >= REPLICATION_WAIT
+            if visible == nil and os.clock() - start < REPLICATION_WAIT then task.wait() end
+        until visible ~= nil or os.clock() - start >= REPLICATION_WAIT
 
         if not bee and os.clock() >= nextScanLog then
             if visible == nil then
@@ -292,7 +288,7 @@ local function scout()
                 nextHop = os.clock() + (hopping and 18 or (8 + math.random(0, 5)))
             end
         end
-        task.wait(1)
+        if os.clock() < nextHop then task.wait(0.25) end
         for id, stamp in pairs(recent) do
             if id ~= game.JobId and os.time() - stamp >= 300 then recent[id] = nil end
         end
