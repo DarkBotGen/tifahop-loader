@@ -1,5 +1,5 @@
 -- Standalone NovaHop Sprout scout. Execute this file directly or use loadstring.
-local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v4/SproutScout.luau"
+local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/headless-sprout-lite-v5/SproutScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
@@ -56,34 +56,37 @@ local function fetch(url, method, body)
     return nil, status or "request failed", retryAfter
 end
 
-local brickLevels = {
-    ["Sage green"] = 1,
-    ["Light grey metallic"] = 2,
-    ["Medium blue"] = 3,
-    ["Alder"] = 5,
-}
-local appearance = {
-    Plastic = {0.705882, 0.745098, 0.729412, 1},
-    Glass = {0.658824, 0.654902, 0.662745, 2},
-    Neon = {0.403922, 0.635294, 0.788235, 3},
-}
-
-local function sproutLevel(part)
-    local colorOk, rank = pcall(function()
-        local style = appearance[part.Material.Name]
-        if not style then return end
-        local color = part.Color
-        if math.abs(color.R - style[1]) < 0.06 and math.abs(color.G - style[2]) < 0.06
-            and math.abs(color.B - style[3]) < 0.06 then
-            return style[4]
+local function epicSprout(sprout)
+    local allowed = {epic = true, legendary = true, supreme = true}
+    for _, attribute in ipairs({"Rarity", "SproutType", "Type"}) do
+        local ok, value = pcall(function() return sprout:GetAttribute(attribute) end)
+        if ok and type(value) == "string" then
+            local name = value:lower():match("^%s*(.-)%s*$"):gsub(" sprout$", "")
+            if allowed[name] then return true end
+            if name == "gummy" or name == "rare" or name == "moon" or name == "basic"
+                or name == "common" or name == "festive" or name == "sticker" then return false end
         end
-    end)
-    if colorOk and rank then return rank end
+    end
 
-    local brickOk, brickRank = pcall(function()
-        return brickLevels[part.BrickColor.Name] or 4
-    end)
-    return brickOk and brickRank or 0
+    local part = sprout:IsA("BasePart") and sprout or sprout:FindFirstChildWhichIsA("BasePart", true)
+    if not part then return false end
+    local ok, brick = pcall(function() return part.BrickColor.Name end)
+    if ok and brick == "Alder" then return false end
+    local transparent, alpha = pcall(function() return part.Transparency end)
+    if transparent and type(alpha) == "number" and alpha > 0.05 then return false end
+    local colorOk, color = pcall(function() return part.Color end)
+    if not colorOk or not color then
+        if not ok then return false end
+        local brickOk, brickColor = pcall(function() return part.BrickColor.Color end)
+        if not brickOk or not brickColor then return false end
+        color = brickColor
+    end
+    local r, g, b = color.R, color.G, color.B
+    local materialOk, material = pcall(function() return part.Material.Name end)
+    local gold = r >= 0.75 and g >= 0.5 and b <= 0.35 and r >= g
+    local teal = g >= 0.55 and b >= 0.43 and r <= 0.42 and g >= b * 0.86
+    local brightGreen = materialOk and material == "Neon" and g >= 0.75 and g - r >= 0.32 and g - b >= 0.32
+    return gold or teal or brightGreen
 end
 
 local function nearestField(position, zones)
@@ -139,8 +142,8 @@ local function findSprout()
     for _, sprout in ipairs(sprouts:GetChildren()) do
         if sprout.Name == "Sprout" then
             local part = sprout:IsA("BasePart") and sprout or sprout:FindFirstChildWhichIsA("BasePart", true)
-            if part then
-                local rank = sproutLevel(part)
+            if part and epicSprout(sprout) then
+                local rank = 4
                 local name = resolveField(sprout, part, zones)
                 if not level or rank > level then
                     best, level, field = sprout, rank, name
