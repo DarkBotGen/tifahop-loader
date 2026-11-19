@@ -1,3 +1,4 @@
+																					else
 																						break
 																					end
 																				end
@@ -4237,7 +4238,7 @@
 												end
 												dc[121] = function(J, N, B, cw, cX, cO)
  if N == "Hive" then
-    return walkToClaimHive(J, ct, function() return ck[1] end, dc[93.])
+    return tweenToClaimHive(J, ct, function() return ck[1] end)
  end
 													local aI, aC, aO = nil, nil, nil
 													local aJ = nil
