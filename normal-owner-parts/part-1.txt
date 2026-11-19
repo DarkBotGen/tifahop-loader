@@ -1,7 +1,7 @@
 -- NovaHop Premium owner edition. Execute this whole file.
 -- The embedded payload is decoded and formatted in the companion readable file.
 local ownerSource = [=[
-local function tweenToClaimHive(destination, player, active)
+local function hiveLandingPoint(destination, player)
     local character = player.Character
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -12,30 +12,10 @@ local function tweenToClaimHive(destination, player, active)
     rayParams.FilterDescendantsInstances = honeycombs and {character, honeycombs} or {character}
     rayParams.RespectCanCollide = true
     local floor = workspace:Raycast(destination + Vector3.new(0, 12, 0), Vector3.new(0, -40, 0), rayParams)
-    if not floor or floor.Normal.Y < 0.5 then error("[NovaHop] Hive landing surface unavailable. Try again once the map loads.", 0) end
-    local clearance = humanoid.HipHeight + root.Size.Y / 2 + 0.5
-    local landing = Vector3.new(destination.X, floor.Position.Y + clearance, destination.Z)
-    local anchored = root.Anchored
-    local tween
-    local ok, reason = pcall(function()
-        root.Anchored = true
-        local distance = (root.Position - landing).Magnitude
-        local duration = math.max(0.1, distance / 80)
-        tween = game:GetService("TweenService"):Create(root,
-            TweenInfo.new(duration, Enum.EasingStyle.Linear),
-            {CFrame = CFrame.new(landing) * root.CFrame.Rotation})
-        tween:Play()
-        while tween.PlaybackState == Enum.PlaybackState.Playing do
-            if not active() or player.Character ~= character or humanoid.Health <= 0 then error("return", 0) end
-            task.wait(0.03)
-        end
-        if tween.PlaybackState ~= Enum.PlaybackState.Completed then error("return", 0) end
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
-    end)
-    if tween then tween:Cancel() end
-    if root.Parent then root.Anchored = anchored end
-    if not ok then error(reason, 0) end
+    if not floor or floor.Normal.Y < 0.5 then
+        error("[NovaHop] Hive landing surface unavailable. Try again once the map loads.", 0)
+    end
+    return Vector3.new(destination.X, floor.Position.Y + humanoid.HipHeight + root.Size.Y / 2 + 0.5, destination.Z)
 end
 
 local ownerDashboardSeed
@@ -9856,7 +9836,8 @@ while true do
 											end
 											dc[121] = function(J, N, B, cw, cX, cO)
  if N == "Hive" then
-    return tweenToClaimHive(J, ct, function() return ck[1] end)
+    dc[93.]()
+    return dc[4](hiveLandingPoint(J, ct), B)
  end
 												local aI, aC, aO = nil, nil, nil
 												local aJ = nil
@@ -91815,3 +91796,23 @@ addMainNameField("sproutmain", "Sprout main username")
 																							4294967295.
 																						)
 																						B = B + 1
+																					else
+																						break
+																					end
+																				end
+																				if E ~= ac then
+																					return false
+																				end
+																				return X == ad
+																			end)(aq9, arc, ara, arb)
+																		)
+																		aq = if ay then 7 else 5
+																	else
+																		break
+																	end
+																else
+																	break
+																end
+															else
+																break
+															end
