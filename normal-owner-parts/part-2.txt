@@ -1,3 +1,30 @@
+																						local u = buffer.readu8(U, B)
+																						E = bit32.bxor(E, u)
+																						E = bit32.band(
+																							E * 33.,
+																							4294967295.
+																						)
+																						B = B + 1
+																					else
+																						break
+																					end
+																				end
+																				if E ~= ac then
+																					return false
+																				end
+																				return X == ad
+																			end)(aq9, arc, ara, arb)
+																		)
+																		aq = if ay then 7 else 5
+																	else
+																		break
+																	end
+																else
+																	break
+																end
+															else
+																break
+															end
 														else
 															break
 														end
@@ -4219,7 +4246,7 @@
 												dc[121] = function(J, N, B, cw, cX, cO)
  if N == "Hive" then
     dc[93.]()
-    return dc[4](hiveLandingPoint(J, ct), B)
+    return safeHiveApproach(J, ct, B, dc[4], dc[136])
  end
 													local aI, aC, aO = nil, nil, nil
 													local aJ = nil

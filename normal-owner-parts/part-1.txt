@@ -18,6 +18,40 @@ local function hiveLandingPoint(destination, player)
     return Vector3.new(destination.X, floor.Position.Y + humanoid.HipHeight + root.Size.Y / 2 + 0.5, destination.Z)
 end
 
+local function safeHiveApproach(destination, player, option, safeTween, finishTween)
+    local character = player.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not root or not humanoid then error("return", 0) end
+    local landing = hiveLandingPoint(destination, player)
+    local collisions = {}
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then collisions[part] = part.CanCollide end
+    end
+    local ok, reason = pcall(safeTween, landing, option)
+    local anchored = root.Anchored
+    if root.Parent then root.Anchored = true end
+    local cleaned, cleanupError = pcall(finishTween)
+    for part, enabled in pairs(collisions) do
+        if part.Parent then part.CanCollide = enabled end
+    end
+    -- A previous interrupted tween may already have left every body part noncollidable.
+    for _, name in ipairs({"Torso", "UpperTorso", "LowerTorso"}) do
+        local torso = character:FindFirstChild(name)
+        if torso and torso:IsA("BasePart") then torso.CanCollide = true end
+    end
+    if root.Parent then
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        root.Anchored = anchored
+    end
+    if player.Character == character and humanoid.Health > 0 then
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+    end
+    if not ok then error(reason, 0) end
+    if not cleaned then error(cleanupError, 0) end
+end
+
 local ownerDashboardSeed
 
 local function dashboardSeed(config, legacyKey, http)
@@ -9837,7 +9871,7 @@ while true do
 											dc[121] = function(J, N, B, cw, cX, cO)
  if N == "Hive" then
     dc[93.]()
-    return dc[4](hiveLandingPoint(J, ct), B)
+    return safeHiveApproach(J, ct, B, dc[4], dc[136])
  end
 												local aI, aC, aO = nil, nil, nil
 												local aJ = nil
@@ -91789,30 +91823,3 @@ addMainNameField("sproutmain", "Sprout main username")
 																				end
 																				while true do
 																					if B < Y then
-																						local u = buffer.readu8(U, B)
-																						E = bit32.bxor(E, u)
-																						E = bit32.band(
-																							E * 33.,
-																							4294967295.
-																						)
-																						B = B + 1
-																					else
-																						break
-																					end
-																				end
-																				if E ~= ac then
-																					return false
-																				end
-																				return X == ad
-																			end)(aq9, arc, ara, arb)
-																		)
-																		aq = if ay then 7 else 5
-																	else
-																		break
-																	end
-																else
-																	break
-																end
-															else
-																break
-															end
