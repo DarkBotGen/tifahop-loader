@@ -1,6 +1,8 @@
 -- NovaHop Premium owner edition. Execute this whole file.
 -- The embedded payload is decoded and formatted in the companion readable file.
 local ownerSource = [=[
+local hiveLandingActive = false
+
 local function hiveLandingPoint(destination, player)
     local character = player.Character
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -15,7 +17,7 @@ local function hiveLandingPoint(destination, player)
     if not floor or floor.Normal.Y < 0.5 then
         error("[NovaHop] Hive landing surface unavailable. Try again once the map loads.", 0)
     end
-    return Vector3.new(destination.X, floor.Position.Y + humanoid.HipHeight + root.Size.Y / 2 + 0.5, destination.Z)
+    return Vector3.new(destination.X, floor.Position.Y + humanoid.HipHeight + root.Size.Y / 2 + 1.5, destination.Z)
 end
 
 local function safeHiveApproach(destination, player, option, safeTween, finishTween)
@@ -28,7 +30,9 @@ local function safeHiveApproach(destination, player, option, safeTween, finishTw
     for _, part in ipairs(character:GetDescendants()) do
         if part:IsA("BasePart") then collisions[part] = part.CanCollide end
     end
+    hiveLandingActive = true
     local ok, reason = pcall(safeTween, landing, option)
+    hiveLandingActive = false
     local anchored = root.Anchored
     if root.Parent then root.Anchored = true end
     local cleaned, cleanupError = pcall(finishTween)
@@ -9452,7 +9456,7 @@ while true do
 																		continue
 																	end
 																elseif aS == 15300. then
-																	aH = bi(N) > 4
+																	aH = bi(N) > (hiveLandingActive and 0.75 or 4)
 																	aS = 20
 																else
 																	aS = 15336.
@@ -91822,4 +91826,3 @@ addMainNameField("sproutmain", "Sprout main username")
 																					end
 																				end
 																				while true do
-																					if B < Y then

@@ -1,6 +1,6 @@
-local base = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/normal-hive-safe-v4/normal-owner-parts/"
+local base = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/normal-hive-safe-v5/normal-owner-parts/"
 local parts = {}
-for index, expectedBytes in ipairs({2911747, 2911774}) do
+for index, expectedBytes in ipairs({2911836, 2911841}) do
     local part = game:HttpGet(base .. "part-" .. index .. ".txt")
     assert(#part == expectedBytes, "NovaHop download incomplete (part " .. index .. ")")
     parts[index] = part

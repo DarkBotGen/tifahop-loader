@@ -1,3 +1,4 @@
+																					if B < Y then
 																						local u = buffer.readu8(U, B)
 																						E = bit32.bxor(E, u)
 																						E = bit32.band(
@@ -3814,7 +3815,7 @@
 																			continue
 																		end
 																	elseif aS == 15300. then
-																		aH = bi(N) > 4
+																		aH = bi(N) > (hiveLandingActive and 0.75 or 4)
 																		aS = 20
 																	else
 																		aS = 15336.
