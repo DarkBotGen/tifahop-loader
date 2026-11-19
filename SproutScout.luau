@@ -1,11 +1,12 @@
 -- Standalone NovaHop Sprout scout. Execute this file directly or use loadstring.
-local BUILD = "stable-rarity-trace-2"
-local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/main/SproutScout.luau"
+local BUILD = "sprout-scout-normal-1"
+local LOADER = "https://raw.githubusercontent.com/DarkBotGen/tifahop-loader/refs/heads/main/SproutScout.luau"
 local ROOM = "pork"
 local MAIN = "warrior_8dragon"
 local RELAY = "https://novahop-relay-ws.lmgmeee.workers.dev"
-local SCAN_SECONDS = 8
-local HANDOFF_SECONDS = 75
+local SCAN_SECONDS = 3
+local REPLICATION_WAIT = 10
+local HANDOFF_SECONDS = 45
 
 local players = game:GetService("Players")
 local http = game:GetService("HttpService")
@@ -18,7 +19,11 @@ if relayHeader == "" and type(readfile) == "function" then
     local ok, saved = pcall(readfile, "NovaHopSproutRelayKey.txt")
     if ok and type(saved) == "string" then relayHeader = saved:match("^%s*(.-)%s*$") end
 end
-assert(relayHeader ~= "", "[Sprout Scout] Pass your relay credential to the loader as a string.")
+assert(relayHeader ~= "", "[Sprout Scout] Put the relay credential in NovaHopSproutRelayKey.txt in the executor workspace, or pass it once to save it.")
+if type(suppliedKey) == "string" and suppliedKey ~= "" and type(writefile) == "function" then
+    local saved = pcall(writefile, "NovaHopSproutRelayKey.txt", relayHeader)
+    if not saved then warn("[Sprout Scout] Credential could not be saved to the workspace.") end
+end
 local requestHttp = request or http_request or (syn and syn.request)
 assert(type(requestHttp) == "function", "[Sprout Scout] HTTP request is unavailable.")
 assert(game.PlaceId == 1537690962, "[Sprout Scout] Run this in Bee Swarm Simulator.")
@@ -348,17 +353,21 @@ local function scout()
 
     print("[Sprout Scout] " .. BUILD .. " searching room " .. ROOM .. " for " .. MAIN)
     local rateDelay = 15
-    local nextHop = os.clock() + math.random(0, 12)
+    local nextHop = os.clock()
     local handled = setmetatable({}, {__mode = "k"})
     local nextScanLog = os.clock()
     local inspected = {}
     while true do
         local start = os.clock()
         local sprout, level, field, visible
+        local readyAt
         repeat
             sprout, level, field, visible = findSprout(handled, inspected)
-            if not sprout then task.wait(1) end
-        until sprout or os.clock() - start >= SCAN_SECONDS
+            if visible ~= nil then readyAt = readyAt or os.clock() end
+            if sprout then break end
+            task.wait(0.25)
+        until (readyAt and os.clock() - readyAt >= SCAN_SECONDS)
+            or os.clock() - start >= REPLICATION_WAIT
 
         if not sprout and os.clock() >= nextScanLog then
             if visible == nil then
@@ -405,7 +414,7 @@ local function scout()
                 nextHop = os.clock() + (hopping and 18 or (8 + math.random(0, 5)))
             end
         end
-        task.wait(1)
+        if os.clock() < nextHop then task.wait(0.25) end
         for id, stamp in pairs(recent) do
             if id ~= game.JobId and os.time() - stamp >= 300 then recent[id] = nil end
         end
